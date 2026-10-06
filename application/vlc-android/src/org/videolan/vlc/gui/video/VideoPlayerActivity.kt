@@ -1191,12 +1191,21 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         if (data == null) return
 
         if (data.hasExtra(EXTRA_MRL)) {
-            val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
-            service?.addSubtitleTrack(getUri(subtitleUri) ?: subtitleUri, false)
-            service?.currentMediaWrapper?.let {
-                SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+            if (requestCode == PICK_AUDIO_FILE) {
+                val audioUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
+                service?.addAudioTrack(getUri(audioUri) ?: audioUri, true)
+                service?.currentMediaWrapper?.let {
+                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Audio, 2, data.getStringExtra(EXTRA_MRL)!!)
+                }
+                addNextTrack = true
+            } else {
+                val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
+                service?.addSubtitleTrack(getUri(subtitleUri) ?: subtitleUri, false)
+                service?.currentMediaWrapper?.let {
+                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+                }
+                addNextTrack = true
             }
-            addNextTrack = true
         } else if (BuildConfig.DEBUG) Log.d(TAG, "Subtitle selection dialog was cancelled")
     }
 
@@ -2593,6 +2602,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         private const val AUDIO_SERVICE_CONNECTION_FAILED = 4
         private const val RESET_BACK_LOCK = 5
         private const val CHECK_VIDEO_TRACKS = 6
+
+        /**
+         * Request code used when picking an external audio file to play with the current video.
+         */
+        const val PICK_AUDIO_FILE = 101
         private const val LOADING_ANIMATION = 7
         internal const val SHOW_INFO = 8
         internal const val HIDE_INFO = 9

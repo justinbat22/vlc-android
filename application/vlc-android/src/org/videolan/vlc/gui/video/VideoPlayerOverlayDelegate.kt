@@ -92,18 +92,20 @@ import org.videolan.vlc.databinding.PlayerHudRightBinding
 import org.videolan.vlc.gui.audio.PlaylistAdapter
 import org.videolan.vlc.gui.browser.FilePickerActivity
 import org.videolan.vlc.gui.browser.KEY_MEDIA
+import org.videolan.vlc.gui.browser.KEY_PICKER_TYPE
 import org.videolan.vlc.gui.dialogs.VideoTracksDialog
 import org.videolan.vlc.gui.helpers.BookmarkListDelegate
 import org.videolan.vlc.gui.helpers.OnRepeatListenerKey
 import org.videolan.vlc.gui.helpers.SwipeDragItemTouchHelperCallback
 import org.videolan.vlc.gui.helpers.TalkbackUtil
 import org.videolan.vlc.gui.helpers.UiTools
-import org.videolan.vlc.gui.helpers.UiTools.showVideoTrack
+import org.videolan.vlc.gui.helpers.UiTools.showTrackOptions
 import org.videolan.vlc.gui.helpers.hf.checkPIN
 import org.videolan.vlc.gui.view.PlayerProgress
 import org.videolan.vlc.isVLC4
 import org.videolan.vlc.manageAbRepeatStep
 import org.videolan.vlc.media.MediaUtils
+import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.getScreenWidth
 import org.videolan.vlc.util.isSchemeFile
@@ -260,13 +262,17 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
     }
 
     fun showTracks() {
-        player.showVideoTrack(
-                {
-                    when (it) {
+        player.showTrackOptions(
+                { menuOption ->
+                    when (menuOption) {
                         VideoTracksDialog.VideoTrackOption.AUDIO_DELAY -> player.delayDelegate.showAudioDelaySetting()
                         VideoTracksDialog.VideoTrackOption.SUB_DELAY -> player.delayDelegate.showSubsDelaySetting()
                         VideoTracksDialog.VideoTrackOption.SUB_DOWNLOAD -> downloadSubtitles()
                         VideoTracksDialog.VideoTrackOption.SUB_PICK -> pickSubtitles()
+                    }
+                }, { audioOption ->
+                    when (audioOption) {
+                        VideoTracksDialog.AudioTrackOption.AUDIO_PICK -> pickAudioFile()
                     }
                 }, { trackID: String, trackType: VideoTracksDialog.TrackType ->
             when (trackType) {
@@ -1110,6 +1116,25 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
         filePickerIntent.putExtra(KEY_MEDIA, media)
         player.startActivityForResult(filePickerIntent, 0)
 
+    }
+
+    /**
+     * Open the file picker to select an external audio file that will be played alongside the
+     * current video (same flow as [pickSubtitles], with audio files enabled).
+     */
+    private fun pickAudioFile() {
+        val uri = player.videoUri ?: return
+        val media = if (uri.scheme.isSchemeFile() || uri.scheme.isSchemeNetwork()) MediaWrapperImpl(FileUtils.getParent(uri.toString())!!.toUri()) else null
+        // The external track must win over a previously selected embedded track on the next
+        // ESAdded(Audio) event, so forget the saved track selection ("0" = auto)
+        player.service?.currentMediaWrapper?.let { mw ->
+            runIO { player.medialibrary.findMedia(mw)?.takeIf { it.id != 0L }?.setStringMeta(MediaWrapper.META_AUDIOTRACK, "0") }
+        }
+        player.isShowingDialog = true
+        val filePickerIntent = Intent(player, FilePickerActivity::class.java)
+        filePickerIntent.putExtra(KEY_MEDIA, media)
+        filePickerIntent.putExtra(KEY_PICKER_TYPE, PickerType.AUDIO.ordinal)
+        player.startActivityForResult(filePickerIntent, VideoPlayerActivity.PICK_AUDIO_FILE)
     }
 
     private fun downloadSubtitles() = player.service?.currentMediaWrapper?.let {

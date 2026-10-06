@@ -66,6 +66,7 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
     override fun allowRemote() = true
 
     lateinit var menuItemListener: (VideoTrackOption) -> Unit
+    lateinit var audioMenuItemListener: (AudioTrackOption) -> Unit
     lateinit var trackSelectionListener: (String, TrackType) -> Unit
 
     private fun onServiceChanged(service: PlaybackService?) {
@@ -75,8 +76,12 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
                 binding.tracksSeparator3.setGone()
             }
             if (playbackService.audioTracksCount <= 0) {
-                binding.audioTracks.trackContainer.setGone()
-                binding.tracksSeparator2.setGone()
+                // Keep the section visible (like the subtitle one) so the user can still
+                // pick an external audio file, but show that no embedded track exists
+                binding.audioTracks.trackContainer.setVisible()
+                binding.audioTracks.emptyView.setVisible()
+            } else {
+                binding.audioTracks.emptyView.setGone()
             }
 
             playbackService.videoTracks?.let { trackList ->
@@ -154,6 +159,7 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
 
         generateSeparator(binding.audioTracks.options)
         generateOptionItem(binding.audioTracks.options, getString(R.string.audio_delay), R.drawable.ic_delay, VideoTrackOption.AUDIO_DELAY)
+        generateOptionItem(binding.audioTracks.options, getString(R.string.audio_track_select), R.drawable.ic_audio_file, VideoTrackOption.AUDIO_PICK)
         generateSeparator(binding.audioTracks.options, true)
         binding.audioTracks.options.setAnimationUpdateListener {
             binding.audioTracks.trackMore.rotation = if (binding.audioTracks.options.isCollapsed) 180F - (180F * it) else 180F * it
@@ -206,12 +212,15 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
         parent.addView(view)
     }
 
-    private fun generateOptionItem(parent: ViewGroup, title: String, @DrawableRes icon: Int, optionId: VideoTrackOption) {
+    private fun generateOptionItem(parent: ViewGroup, title: String, @DrawableRes icon: Int, optionId: Any) {
         val view = layoutInflater.inflate(R.layout.player_overlay_track_option_item, null)
         view.findViewById<TextView>(R.id.option_title).text = title
         view.findViewById<ImageView>(R.id.option_icon).setImageBitmap(requireContext().getBitmapFromDrawable(icon))
         view.setOnClickListener {
-            menuItemListener.invoke(optionId)
+            when (optionId) {
+                is AudioTrackOption -> audioMenuItemListener.invoke(optionId)
+                is VideoTrackOption -> menuItemListener.invoke(optionId)
+            }
             dismiss()
         }
         parent.addView(view)
@@ -228,6 +237,14 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
 
     enum class VideoTrackOption {
         SUB_DELAY, SUB_PICK, SUB_DOWNLOAD, AUDIO_DELAY
+    }
+
+    /**
+     * Options that only make sense for the audio track section.
+     * Kept separate from [VideoTrackOption] so listener signatures stay exhaustive.
+     */
+    enum class AudioTrackOption {
+        AUDIO_PICK
     }
 }
 

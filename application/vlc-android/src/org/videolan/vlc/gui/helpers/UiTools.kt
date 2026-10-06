@@ -704,6 +704,23 @@ object UiTools {
         videoTracksDialog.trackSelectionListener = trackSelectionListener
     }
 
+    /**
+     * Show the tracks dialog with all listeners wired: generic track options (delays, subtitle
+     * pick/download), audio-track-specific options (external audio file pick) and track selection.
+     */
+    fun FragmentActivity.showTrackOptions(
+            menuListener:(VideoTracksDialog.VideoTrackOption) -> Unit,
+            audioMenuListener:(VideoTracksDialog.AudioTrackOption) -> Unit,
+            trackSelectionListener:(String, VideoTracksDialog.TrackType) -> Unit) {
+        if (!isStarted()) return
+        val videoTracksDialog = VideoTracksDialog()
+        videoTracksDialog.arguments = bundleOf()
+        videoTracksDialog.show(supportFragmentManager, "fragment_video_tracks")
+        videoTracksDialog.menuItemListener = menuListener
+        videoTracksDialog.audioMenuItemListener = audioMenuListener
+        videoTracksDialog.trackSelectionListener = trackSelectionListener
+    }
+
     fun FragmentActivity.showDonations() {
         if (!isStarted()) return
 //        val videoTracksDialog = VLCBillingDialog()

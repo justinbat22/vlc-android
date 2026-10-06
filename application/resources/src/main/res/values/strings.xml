@@ -232,6 +232,7 @@
     <string name="sleep_in">Sleep in</string>
     <string name="jump_to_time">Jump to Time</string>
     <string name="subtitle_select">Select subtitle file</string>
+    <string name="audio_track_select">Select audio file</string>
     <string name="wait_before_sleep">Wait for current media item to finish first</string>
     <string name="reset_on_interaction">Reset on any interaction</string>
     <string name="default_sleep_timer_summary">%1$s, wait media end: %2$s, reset on interaction: %3$s</string>
@@ -662,6 +663,7 @@
     <string name="file_size">File size</string>
 
     <string name="audio_delay">Audio delay</string>
+    <string name="no_audio_files_found">No audio files in this directory</string>
     <string name="spu_delay">Subtitle delay</string>
     <string name="network_shares_discovery">Looking for network shares</string>
     <string name="network_empty">This directory is empty.</string>

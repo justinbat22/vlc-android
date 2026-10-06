@@ -172,6 +172,10 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun addSubtitleTrack(uri: Uri, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Subtitle, uri, select)
 
+    fun addAudioTrack(path: String, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Audio, path, select)
+
+    fun addAudioTrack(uri: Uri, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Audio, uri, select)
+
     fun getSpuTracks(): Array<out VlcTrack>? = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAllSpuTracks() else emptyArray()
 
     fun getSpuTrack() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedSpuTrack()?.getId() ?: "-1" else "-1"

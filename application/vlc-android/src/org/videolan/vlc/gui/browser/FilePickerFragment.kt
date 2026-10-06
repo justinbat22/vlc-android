@@ -78,7 +78,8 @@ class FilePickerFragment : FileBrowserFragment(), BrowserContainer<MediaLibraryI
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding.emptyLoading.emptyText = getString(R.string.no_subs_found)
+        if (pickerType == PickerType.AUDIO) binding.emptyLoading.emptyText = getString(R.string.no_audio_files_found)
+        else binding.emptyLoading.emptyText = getString(R.string.no_subs_found)
     }
 
     override fun onStart() {
