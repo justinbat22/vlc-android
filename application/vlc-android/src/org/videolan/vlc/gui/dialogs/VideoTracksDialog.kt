@@ -159,7 +159,7 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
 
         generateSeparator(binding.audioTracks.options)
         generateOptionItem(binding.audioTracks.options, getString(R.string.audio_delay), R.drawable.ic_delay, VideoTrackOption.AUDIO_DELAY)
-        generateOptionItem(binding.audioTracks.options, getString(R.string.audio_track_select), R.drawable.ic_audio_file, VideoTrackOption.AUDIO_PICK)
+        generateOptionItem(binding.audioTracks.options, getString(R.string.audio_track_select), R.drawable.ic_audio_file, AudioTrackOption.AUDIO_PICK)
         generateSeparator(binding.audioTracks.options, true)
         binding.audioTracks.options.setAnimationUpdateListener {
             binding.audioTracks.trackMore.rotation = if (binding.audioTracks.options.isCollapsed) 180F - (180F * it) else 180F * it

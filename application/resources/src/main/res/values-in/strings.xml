@@ -940,7 +940,7 @@
 
 
     <!--    accessibility-->
-    <string name="talkback_media_content_description">%s - judul: %s - durasi: %s</string>
+    <string name="talkback_media_content_description">%1$s - judul: %2$s - durasi: %3$s</string>
     <string name="talkback_genre">Genre: %s</string>
     <string name="talkback_history_item">Sejarah item</string>
     <string name="talkback_playlist">Daftar putar: %s</string>
@@ -967,7 +967,7 @@
     <string name="talkback_video_tracks">Trek video</string>
     <string name="talkback_audio_tracks">Trek audio</string>
     <string name="talkback_subtitle_tracks">Trek takarir</string>
-    <string name="talkback_subtitle_dowload_item">Bahasa: %s. %s. Nama: %s</string>
+    <string name="talkback_subtitle_dowload_item">Bahasa: %1$s. %2$s. Nama: %3$s</string>
     <string name="selected">Dipilih</string>
     <string name="talkback_increase_delay">Tambahkan delay</string>
     <string name="talkback_decrease_delay">Kurangi delay</string>
@@ -979,8 +979,8 @@
     <string name="talkback_audio_player_collapsed">Pemutar audio disembunyikan</string>
     <string name="talkback_audio_player_closed">Pemutar audio ditutup</string>
     <string name="talkback_audio_player">Pemutar audio. Sekarang memainkan: %s</string>
-    <string name="talkback_out_of">%s dari %s</string>
-    <string name="talkback_track_index">Trek %s dari %s</string>
+    <string name="talkback_out_of">%1$s dari %2$s</string>
+    <string name="talkback_track_index">Trek %1$s dari %2$s</string>
     <string name="downloaded">Telah diunduh</string>
     <string name="not_downloaded">Tidak diunduh</string>
     <string name="downloading">Mengunduh</string>
