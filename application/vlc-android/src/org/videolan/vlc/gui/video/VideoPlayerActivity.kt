@@ -149,6 +149,7 @@ import org.videolan.tools.ENABLE_SCALE_GESTURE
 import org.videolan.tools.ENABLE_SEEK_BUTTONS
 import org.videolan.tools.ENABLE_SWIPE_SEEK
 import org.videolan.tools.ENABLE_VOLUME_GESTURE
+import org.videolan.tools.KEY_ACCENT_COLOR
 import org.videolan.tools.KEY_AUDIO_BOOST
 import org.videolan.tools.KEY_AUDIO_PREFERRED_LANGUAGE
 import org.videolan.tools.KEY_ENABLE_CLONE_MODE
@@ -201,6 +202,7 @@ import org.videolan.vlc.gui.dialogs.SleepTimerDialog
 import org.videolan.vlc.gui.dialogs.VLCBottomSheetDialogFragment.Companion.shouldInterceptRemote
 import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
 import org.videolan.vlc.gui.dialogs.showContext
+import org.videolan.vlc.gui.helpers.ACCENT_COLOR_DEFAULT
 import org.videolan.vlc.gui.helpers.BitmapUtil
 import org.videolan.vlc.gui.helpers.KeycodeListener
 import org.videolan.vlc.gui.helpers.PlayerKeyListenerDelegate
@@ -208,6 +210,8 @@ import org.videolan.vlc.gui.helpers.PlayerOptionsDelegate
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
+import org.videolan.vlc.gui.helpers.accentOverlayRes
+import org.videolan.vlc.gui.helpers.applyOverlay
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate
 import org.videolan.vlc.interfaces.IPlaybackSettingsController
 import org.videolan.vlc.media.NO_LENGTH_PROGRESS_MAX
@@ -529,6 +533,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Overlay the user-selected interface accent so the player chrome and seek bar match the app.
+        theme.applyOverlay(accentOverlayRes(Settings.getInstance(this).getString(KEY_ACCENT_COLOR, ACCENT_COLOR_DEFAULT)))
         super.onCreate(savedInstanceState)
 
         dialogsDelegate.observeDialogs(this, this)

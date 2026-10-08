@@ -34,6 +34,8 @@ import org.videolan.resources.AndroidDevices
 import org.videolan.tools.AUDIO_DUCKING
 import org.videolan.tools.BROWSER_SHOW_HIDDEN_FILES
 import org.videolan.tools.KEY_AOUT
+import org.videolan.tools.KEY_ACCENT_COLOR
+import org.videolan.tools.KEY_AMOLED_THEME
 import org.videolan.tools.KEY_APP_THEME
 import org.videolan.tools.KEY_AUDIO_DIGITAL_OUTPUT
 import org.videolan.tools.KEY_AUDIO_RESUME_CARD
@@ -74,7 +76,7 @@ object PreferenceVisibilityManager {
     fun isPreferenceVisible(key:String?, sharedPreferences: SharedPreferences, forTv: Boolean = false) = when (key) {
         //hidden on TV
         KEY_QUICK_PLAY_DEFAULT, KEY_QUICK_PLAY, "secondary_display_category", "secondary_display_category_summary", KEY_ENABLE_CLONE_MODE, SAVE_BRIGHTNESS,
-        KEY_APP_THEME, LIST_TITLE_ELLIPSIZE, KEY_ENABLE_HEADSET_DETECTION, KEY_ENABLE_PLAY_ON_HEADSET_INSERTION, KEY_IGNORE_HEADSET_MEDIA_BUTTON_PRESSES,
+        KEY_APP_THEME, KEY_AMOLED_THEME, KEY_ACCENT_COLOR, LIST_TITLE_ELLIPSIZE, KEY_ENABLE_HEADSET_DETECTION, KEY_ENABLE_PLAY_ON_HEADSET_INSERTION, KEY_IGNORE_HEADSET_MEDIA_BUTTON_PRESSES,
         "headset_prefs_category", KEY_AUDIO_RESUME_CARD, LOCKSCREEN_COVER, SHOW_SEEK_IN_COMPACT_NOTIFICATION,
         KEY_AUDIO_TASK_REMOVED, "casting_category", "android_auto_category", SCREEN_ORIENTATION, -> !forTv
         //only on TV
