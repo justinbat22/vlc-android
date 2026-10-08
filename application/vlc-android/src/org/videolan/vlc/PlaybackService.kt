@@ -1871,6 +1871,13 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     @MainThread
     fun addAudioTrack(uri: Uri, select: Boolean) = playlistManager.addExternalAudio(uri, select)
 
+    /**
+     * Stops the external audio companion player, if any, and gives the audio back to the embedded
+     * track. Call this when the user selects a real (embedded) audio track or disables the audio.
+     */
+    @MainThread
+    fun stopExternalAudio() = playlistManager.player.stopExternalAudio()
+
     @MainThread
     fun setSpuTrack(index: String) = playlistManager.setSpuTrack(index)
 

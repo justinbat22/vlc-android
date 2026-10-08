@@ -55,6 +55,22 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     /** Volume requested by the app, applied to the companion player while it is active. */
     private var externalAudioVolume: Int? = null
 
+    /** Audio delay applied to the companion player while it is active. */
+    @Volatile
+    private var externalAudioDelay: Long = 0L
+
+    /**
+     * Re-applies [externalAudioDelay] once the companion player has an audio output: LibVLC only
+     * honours `setAudioDelay` after the output exists, so a delay set before playback may be
+     * dropped.
+     */
+    private val externalAudioEventListener = MediaPlayer.EventListener { event ->
+        if (event?.type == MediaPlayer.Event.Playing) {
+            val companion = externalAudioPlayer
+            if (companion != null && !companion.isReleased) companion.setAudioDelay(externalAudioDelay)
+        }
+    }
+
     var mediaplayer = newMediaPlayer()
         private set
     var switchToVideo = false
@@ -164,15 +180,37 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun getCurrentVideoTrack(): VlcTrack? = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedVideoTrack() else null
 
-    fun getAudioTracksCount() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAudioTracksCount() else 0
+    fun getAudioTracksCount(): Int {
+        var count = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAudioTracksCount() else 0
+        if (externalAudioPlayer !== null) count++
+        return count
+    }
 
-    fun getAudioTracks(): Array<out VlcTrack>? = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAllAudioTracks() else emptyArray()
+    /**
+     * Embedded audio tracks, plus a fake track representing the external audio file when the
+     * companion player is active, so the selection can be shown (and switched back from) in the
+     * audio tracks menu.
+     */
+    fun getAudioTracks(): Array<out VlcTrack>? {
+        if (mediaplayer.isReleased || !mediaplayer.hasMedia()) return emptyArray()
+        val tracks = mediaplayer.getAllAudioTracks()
+        val external = pendingExternalAudioUri
+        return if (externalAudioPlayer !== null && external !== null) tracks + ExternalAudioTrack(external) else tracks
+    }
 
-    fun getAudioTrack():String = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedAudioTrack()?.getId() ?: "-1" else "-1"
+    fun getAudioTrack(): String {
+        if (externalAudioPlayer !== null) return EXTERNAL_AUDIO_TRACK_ID
+        return if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedAudioTrack()?.getId() ?: "-1" else "-1"
+    }
 
     fun setVideoTrack(index: String) = !mediaplayer.isReleased && mediaplayer.hasMedia() && mediaplayer.setVideoTrack(index)
 
-    fun setAudioTrack(index: String) = !mediaplayer.isReleased && mediaplayer.hasMedia() && mediaplayer.setAudioTrack(index)
+    fun setAudioTrack(index: String): Boolean {
+        // Selecting the external audio entry keeps it as the active audio source and must never be
+        // forwarded to the main player (its id is not a libvlc track index)
+        if (index == EXTERNAL_AUDIO_TRACK_ID) return externalAudioPlayer !== null
+        return !mediaplayer.isReleased && mediaplayer.hasMedia() && mediaplayer.setAudioTrack(index)
+    }
 
     fun unselectTrackType(trackType: VideoTracksDialog.TrackType) {
         val vlcTrackType = when(trackType) {
@@ -185,7 +223,11 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun setAudioDigitalOutputEnabled(enabled: Boolean) = !mediaplayer.isReleased && mediaplayer.setAudioDigitalOutputEnabled(enabled)
 
-    fun getAudioDelay() = if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.audioDelay else 0L
+    fun getAudioDelay(): Long {
+        val companion = externalAudioPlayer
+        if (companion != null && !companion.isReleased) return externalAudioDelay
+        return if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.audioDelay else 0L
+    }
 
     fun getSpuDelay() = if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.spuDelay else 0L
 
@@ -207,7 +249,17 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun getSpuTracksCount() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSpuTracksCount() else 0
 
-    fun setAudioDelay(delay: Long) = mediaplayer.setAudioDelay(delay)
+    /**
+     * Applies the audio delay to the companion player (when the external audio is playing) and to
+     * the main player, so the delay is also in effect after switching back to the embedded audio.
+     */
+    fun setAudioDelay(delay: Long): Boolean {
+        externalAudioDelay = delay
+        val companion = externalAudioPlayer
+        val appliedToCompanion = companion != null && !companion.isReleased && companion.setAudioDelay(delay)
+        val appliedToMain = mediaplayer.hasMedia() && !mediaplayer.isReleased && mediaplayer.setAudioDelay(delay)
+        return appliedToCompanion || appliedToMain
+    }
 
     fun setEqualizer(equalizer: MediaPlayer.Equalizer?) = mediaplayer.setEqualizer(equalizer)
 
@@ -299,9 +351,12 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         externalAudioVolume = volume
         externalAudioPlayer = companion
         if (!companion.isReleased) {
+            companion.setEventListener(externalAudioEventListener)
             companion.volume = volume
             companion.rate = mediaplayer.rate
             companion.play()
+            // The delay may have been requested before the companion existed (global/BT delay)
+            companion.setAudioDelay(externalAudioDelay)
         }
         // The external file takes over: mute the embedded audio of the main player by volume,
         // so it works with both the VLC 3 and VLC 4 flavors
@@ -478,6 +533,32 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
 const val NO_LENGTH_PROGRESS_MAX = 1000
 class Progress(var time: Long = 0L, var length: Long = 0L)
+
+/**
+ * Id of the fake [VlcTrack] used to represent the external audio file in the audio tracks menu.
+ * It is deliberately not numeric (VLC uses "-1" for "disable track" and "-2" as a UI sentinel).
+ */
+const val EXTERNAL_AUDIO_TRACK_ID = "external-audio"
+
+/**
+ * Fake [VlcTrack] exposing the external audio file in the audio tracks menu so the current
+ * selection is visible. Selecting it goes through [PlayerController.setAudioTrack].
+ */
+class ExternalAudioTrack(private val uri: Uri) : VlcTrack {
+    override fun getName() = Uri.decode(uri.lastPathSegment ?: uri.toString())
+
+    override fun getId() = EXTERNAL_AUDIO_TRACK_ID
+
+    override fun getWidth() = 0
+
+    override fun getHeight() = 0
+
+    override fun getProjection() = 0
+
+    override fun getFrameRateDen() = 0
+
+    override fun getFrameRateNum() = 0
+}
 
 internal interface MediaPlayerEventListener {
     suspend fun onEvent(event: MediaPlayer.Event)

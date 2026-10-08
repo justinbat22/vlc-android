@@ -104,6 +104,7 @@ import org.videolan.vlc.gui.helpers.hf.checkPIN
 import org.videolan.vlc.gui.view.PlayerProgress
 import org.videolan.vlc.isVLC4
 import org.videolan.vlc.manageAbRepeatStep
+import org.videolan.vlc.media.EXTERNAL_AUDIO_TRACK_ID
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.providers.PickerType
 import org.videolan.vlc.util.FileUtils
@@ -278,11 +279,15 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
             when (trackType) {
                 VideoTracksDialog.TrackType.AUDIO -> {
                     player.service?.let { service ->
+                        // Picking anything but the external entry gives the audio back to the main player
+                        if (trackID != EXTERNAL_AUDIO_TRACK_ID) service.stopExternalAudio()
                         if (isVLC4() && trackID == "-1")
                             service.unselectTrackType(trackType)
                         else
                             service.setAudioTrack(trackID)
-                        runIO {
+                        // The external audio entry is not a media track: never persist it as the
+                        // preferred audio track of the media
+                        if (trackID != EXTERNAL_AUDIO_TRACK_ID) runIO {
                             val mw = player.medialibrary.findMedia(service.currentMediaWrapper)
                             if (mw != null && mw.id != 0L) mw.setStringMeta(MediaWrapper.META_AUDIOTRACK, trackID)
                         }
