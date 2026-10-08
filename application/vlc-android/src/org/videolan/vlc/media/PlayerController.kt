@@ -10,9 +10,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
 import org.videolan.BuildConfig
+import org.videolan.libvlc.FactoryManager
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.RendererItem
 import org.videolan.libvlc.interfaces.IMedia
+import org.videolan.libvlc.interfaces.IMediaFactory
 import org.videolan.libvlc.interfaces.IMediaList
 import org.videolan.libvlc.interfaces.IVLCVout
 import org.videolan.medialibrary.interfaces.media.MediaWrapper
@@ -36,6 +38,22 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     val progress by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Progress>().apply { value = Progress() } }
     val speed by lazy(LazyThreadSafetyMode.NONE) { MutableLiveData<Float>().apply { value = 1.0F } }
     private val slaveRepository by lazy { SlaveRepository.getInstance(context) }
+    private val mediaFactory by lazy { FactoryManager.getFactory(IMediaFactory.factoryId) as IMediaFactory }
+
+    /**
+     * Companion player used to play an external audio file alongside the video. This audio is
+     * deliberately NOT attached to [mediaplayer] as a libvlc slave: an audio slave is a separate
+     * demuxer that doesn't follow the master input on seek (the video resets to 00:00 and stalls
+     * while the external audio keeps playing). This player mirrors the main transport instead.
+     */
+    private var externalAudioPlayer: MediaPlayer? = null
+
+    /** External audio persisted for the media being played, set by [setSlaves]. */
+    @Volatile
+    private var pendingExternalAudioUri: Uri? = null
+
+    /** Volume requested by the app, applied to the companion player while it is active. */
+    private var externalAudioVolume: Int? = null
 
     var mediaplayer = newMediaPlayer()
         private set
@@ -55,17 +73,20 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun play() {
         if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.play()
+        externalAudioPlayer?.let { if (!it.isReleased) it.play() }
     }
 
     fun pause(): Boolean {
         if (isPlaying() && mediaplayer.hasMedia() && pausable) {
             mediaplayer.pause()
+            externalAudioPlayer?.let { if (!it.isReleased) it.pause() }
             return true
         }
         return false
     }
 
     fun stop() {
+        stopExternalAudio()
         if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.stop()
         setPlaybackStopped()
     }
@@ -90,6 +111,8 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
             mediaplayer.setVideoTitleDisplay(MediaPlayer.Position.Disable, 0)
             mediaplayer.play()
         }
+        val externalAudio = pendingExternalAudioUri
+        if (externalAudio !== null) startExternalAudio(externalAudio, time) else stopExternalAudio()
     }
 
     private fun resetPlaybackState(time: Long, duration: Long) {
@@ -114,10 +137,12 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun setPosition(position: Float) {
         if (seekable && mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.position = position
+        externalAudioPlayer?.let { if (!it.isReleased) it.position = position }
     }
 
     fun setTime(time: Long, fast:Boolean = false) {
         if (seekable && mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.setTime(time, fast)
+        externalAudioPlayer?.let { if (!it.isReleased) it.setTime(time, fast) }
     }
 
     fun isPlaying() = playbackState == PlaybackStateCompat.STATE_PLAYING
@@ -198,6 +223,7 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     }
 
     fun release(player: MediaPlayer = mediaplayer) {
+        stopExternalAudio()
         player.setEventListener(null)
         if (isVideoPlaying()) player.vlcVout.detachViews()
         releaseMedia()
@@ -216,17 +242,78 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     /**
      * Attaches the slaves of [mw] (medialibrary ones + the ones persisted in the database) to
      * [media]. This MUST happen before playback starts (i.e. before the media is set on the
-     * player): audio slaves added at runtime with MediaPlayer.addSlave don't follow seeks —
-     * the master input resets to 00:00 and stalls while the external audio keeps playing.
+     * player): slaves added at runtime with MediaPlayer.addSlave don't follow seeks — the master
+     * input resets to 00:00 and stalls.
+     *
+     * Audio slaves are the exception: they are never attached to the media (that is what broke
+     * seeking). Instead the persisted URI is kept in [pendingExternalAudioUri] so that
+     * [startPlayback] can start the companion player. See [startExternalAudio].
      */
     suspend fun setSlaves(media: IMedia, mw: MediaWrapper) {
         if (mediaplayer.isReleased) return
         val slaves = mw.slaves
-        slaves?.let { it.forEach { slave -> media.addSlave(slave) } }
-        slaveRepository.getSlaves(mw.location).forEach { slave ->
+        slaves?.filter { it.type != IMedia.Slave.Type.Audio }?.forEach { slave -> media.addSlave(slave) }
+        val persisted = slaveRepository.getSlaves(mw.location)
+        persisted.filter { it.type != IMedia.Slave.Type.Audio }.forEach { slave ->
             if (!slaves.contains(slave)) media.addSlave(slave)
         }
+        pendingExternalAudioUri = persisted.firstOrNull { it.type == IMedia.Slave.Type.Audio }?.uri?.let { Uri.parse(it) }
         slaves?.let { slaveRepository.saveSlaves(mw) }
+    }
+
+    /**
+     * Plays an external audio file in a companion player and mutes the embedded audio so only the
+     * external file is audible.
+     *
+     * This replaces the libvlc audio slave mechanism, which cannot seek correctly. The companion
+     * mirrors every transport change applied to [mediaplayer] (play, pause, seek, position, rate,
+     * volume) so both stay in sync, and the embedded audio of the main player is muted so only the
+     * external file is audible. Not available while casting, since a renderer is bound to a single
+     * player.
+     */
+    internal suspend fun startExternalAudio(uri: Uri, time: Long = getCurrentTime()) {
+        stopExternalAudio()
+        if (mediaplayer.isReleased || hasRenderer) return
+        pendingExternalAudioUri = uri
+        val libVlc = VLCInstance.getInstance(context)
+        // Callers may run on a background dispatcher (PlaybackService.launch uses Dispatchers.IO),
+        // so the player is created on the main thread like every other player of the app
+        val companion = withContext(Dispatchers.Main.immediate) {
+            MediaPlayer(libVlc).apply {
+                setAudioDigitalOutputEnabled(VLCOptions.isAudioDigitalOutputEnabled(settings))
+                VLCOptions.getAout(settings)?.let { setAudioOutput(it) }
+            }
+        }
+        val media = mediaFactory.getFromUri(libVlc, uri)
+        media.addOption(":no-video")
+        media.addOption(":no-spu")
+        // LibVLC ignores MediaPlayer.setTime() before playback, :start-time is the workaround
+        media.addOption(":start-time=${time / 1000L}")
+        VLCOptions.setMediaOptions(media, context, MediaWrapper.MEDIA_FORCE_AUDIO, false)
+        withContext(Dispatchers.IO) { if (!companion.isReleased) companion.media = media }
+        media.release()
+        val volume = externalAudioVolume ?: if (!mediaplayer.isReleased) mediaplayer.volume else 100
+        externalAudioVolume = volume
+        externalAudioPlayer = companion
+        if (!companion.isReleased) {
+            companion.volume = volume
+            companion.rate = mediaplayer.rate
+            companion.play()
+        }
+        // The external file takes over: mute the embedded audio of the main player by volume,
+        // so it works with both the VLC 3 and VLC 4 flavors
+        if (!mediaplayer.isReleased) mediaplayer.setVolume(0)
+    }
+
+    /** Stops and releases the companion player used for the external audio, if any. */
+    fun stopExternalAudio() {
+        val companion = externalAudioPlayer ?: return
+        externalAudioPlayer = null
+        if (!mediaplayer.isReleased) mediaplayer.setVolume(externalAudioVolume ?: mediaplayer.volume)
+        if (companion.isReleased) return
+        companion.setEventListener(null)
+        companion.stop()
+        launch(Dispatchers.IO) { if (!companion.isReleased) companion.release() }
     }
 
     private fun newMediaPlayer() : MediaPlayer {
@@ -251,6 +338,7 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     fun setRate(rate: Float, save: Boolean) {
         if (mediaplayer.isReleased) return
         mediaplayer.rate = rate
+        externalAudioPlayer?.let { if (!it.isReleased) it.rate = rate }
         speed.postValue(rate)
     }
 
@@ -303,9 +391,20 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         if (!mediaplayer.isReleased)  mediaplayer.title = title
     }
 
-    fun getVolume() = if (!mediaplayer.isReleased) mediaplayer.volume else 100
+    fun getVolume() = when {
+        externalAudioPlayer !== null -> externalAudioVolume ?: 100
+        !mediaplayer.isReleased -> mediaplayer.volume
+        else -> 100
+    }
 
-    fun setVolume(volume: Int) = if (!mediaplayer.isReleased) mediaplayer.setVolume(volume) else -1
+    fun setVolume(volume: Int): Int {
+        externalAudioVolume = volume
+        val companion = externalAudioPlayer
+        if (companion !== null && !companion.isReleased) companion.setVolume(volume)
+        // The embedded audio is muted while the companion plays the external file
+        if (!mediaplayer.isReleased) mediaplayer.setVolume(if (companion !== null) 0 else volume)
+        return volume
+    }
 
     suspend fun expand(): IMediaList? {
         return mediaplayer.media?.let {

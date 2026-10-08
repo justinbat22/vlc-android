@@ -1193,9 +1193,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         if (data.hasExtra(EXTRA_MRL)) {
             if (requestCode == PICK_AUDIO_FILE) {
                 val audioUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
-                // The service persists the resolved URI, rebuilds the media with the audio
-                // attached pre-play and restarts at the current position (runtime-added audio
-                // slaves break seeking), see PlaybackService.addAudioTrack
+                // The service persists the resolved URI and plays it in a companion player so the
+                // video keeps seeking correctly, see PlaybackService.addAudioTrack
                 service?.addAudioTrack(getUri(audioUri) ?: audioUri, true)
                 addNextTrack = true
             } else {

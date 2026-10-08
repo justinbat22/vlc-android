@@ -1864,9 +1864,9 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     fun addSubtitleTrack(uri: Uri, select: Boolean) = playlistManager.player.addSubtitleTrack(uri, select)
 
     /**
-     * Adds an external audio track to the current media. The media is rebuilt with the audio
-     * slave attached before playback and restarted at the current position: audio slaves added
-     * at runtime via MediaPlayer.addSlave don't follow seeks (video resets to 00:00 and stalls).
+     * Adds an external audio track to the current media. The file is played by a companion
+     * player synchronized with the main one instead of a libvlc audio slave: audio slaves don't
+     * follow the master input on seek (the video resets to 00:00 and stalls).
      */
     @MainThread
     fun addAudioTrack(uri: Uri, select: Boolean) = playlistManager.addExternalAudio(uri, select)

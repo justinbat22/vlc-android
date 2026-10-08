@@ -18,7 +18,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -605,42 +604,17 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     /**
-     * Attaches an external audio file to the currently playing media and restarts playback at
-     * the current position.
+     * Adds an external audio file to the currently playing media.
      *
-     * The audio slave MUST be part of the IMedia before the player starts (see
-     * [PlayerController.setSlaves]): adding one at runtime with MediaPlayer.addSlave breaks the
-     * master/slave synchronization on seek — the video input resets to 00:00 and stalls while
-     * the external audio keeps playing. We therefore rebuild the media with the slave attached
-     * and restart where the user was.
+     * The resolved URI is persisted so the track is picked up again on the next playbacks. The
+     * file is played by a companion player instead of a libvlc audio slave: an audio slave is a
+     * separate demuxer that doesn't follow the master input on seek (the video resets to 00:00
+     * and stalls while the external audio keeps playing). See [PlayerController.startExternalAudio].
      */
     fun addExternalAudio(uri: Uri, select: Boolean = true) = service.launch {
         val mw = getCurrentMedia() ?: return@launch
-        val time = player.getCurrentTime()
-        val wasPlaying = player.isPlaying()
-        val previousTrackIds = player.getAudioTracks()?.map { it.getId() }?.toSet() ?: emptySet()
-        // Persist the resolved URI so the track is re-attached on future plays
         slaveRepository.saveSlave(mw.location, IMedia.Slave.Type.Audio, 2, uri.toString()).join()
-
-        val media = mediaFactory.getFromUri(VLCInstance.getInstance(service), mw.uri)
-        media.addOption(":start-time=${time / 1000L}")
-        media.addOption(":no-sout-chromecast-video")
-        VLCOptions.setMediaOptions(media, ctx, mw.flags, PlaybackService.hasRenderer())
-        player.setSlaves(media, mw)
-        media.setEventListener(this@PlaylistManager)
-        newMedia = true
-        player.startPlayback(media, mediaplayerEventListener, time)
-        media.release()
-        if (!wasPlaying) pause()
-
-        // Select the external track once the new input exposes it (it is appended after the
-        // embedded ones). Harmless no-op if the engine already selected it.
-        repeat(100) {
-            delay(100)
-            val externalTrack = player.getAudioTracks()?.lastOrNull { it.getId() !in previousTrackIds } ?: return@repeat
-            player.setAudioTrack(externalTrack.getId())
-            return@launch
-        }
+        player.startExternalAudio(uri)
     }
 
     fun onServiceDestroyed() {
