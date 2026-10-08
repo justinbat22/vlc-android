@@ -5,6 +5,7 @@ import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import android.widget.Toast
 import androidx.annotation.MainThread
+import androidx.core.net.toUri
 import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -171,6 +172,10 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun addSubtitleTrack(uri: Uri, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Subtitle, uri, select)
 
+    fun addAudioTrack(path: String, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Audio, path, select)
+
+    fun addAudioTrack(uri: Uri, select: Boolean) = mediaplayer.addSlave(IMedia.Slave.Type.Audio, uri, select)
+
     fun getSpuTracks(): Array<out VlcTrack>? = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAllSpuTracks() else emptyArray()
 
     fun getSpuTrack() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedSpuTrack()?.getId() ?: "-1" else "-1"
@@ -213,18 +218,13 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
         setPlaybackStopped()
     }
 
-    /**
-     * Attaches the slaves of [mw] (medialibrary ones + the ones persisted in the database) to
-     * [media]. This MUST happen before playback starts (i.e. before the media is set on the
-     * player): audio slaves added at runtime with MediaPlayer.addSlave don't follow seeks —
-     * the master input resets to 00:00 and stalls while the external audio keeps playing.
-     */
-    suspend fun setSlaves(media: IMedia, mw: MediaWrapper) {
-        if (mediaplayer.isReleased) return
+    fun setSlaves(media: IMedia, mw: MediaWrapper) = launch {
+        if (mediaplayer.isReleased) return@launch
         val slaves = mw.slaves
         slaves?.let { it.forEach { slave -> media.addSlave(slave) } }
+        media.release()
         slaveRepository.getSlaves(mw.location).forEach { slave ->
-            if (!slaves.contains(slave)) media.addSlave(slave)
+            if (!slaves.contains(slave)) mediaplayer.addSlave(slave.type, slave.uri.toUri(), false)
         }
         slaves?.let { slaveRepository.saveSlaves(mw) }
     }

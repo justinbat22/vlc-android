@@ -1193,10 +1193,10 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         if (data.hasExtra(EXTRA_MRL)) {
             if (requestCode == PICK_AUDIO_FILE) {
                 val audioUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
-                // The service persists the resolved URI, rebuilds the media with the audio
-                // attached pre-play and restarts at the current position (runtime-added audio
-                // slaves break seeking), see PlaybackService.addAudioTrack
                 service?.addAudioTrack(getUri(audioUri) ?: audioUri, true)
+                service?.currentMediaWrapper?.let {
+                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Audio, 2, data.getStringExtra(EXTRA_MRL)!!)
+                }
                 addNextTrack = true
             } else {
                 val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()

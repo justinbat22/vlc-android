@@ -1,7 +1,6 @@
 package org.videolan.vlc.media
 
 import android.content.Intent
-import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.widget.Toast
@@ -18,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.actor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,7 +88,6 @@ import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.browser.BaseBrowserFragment
 import org.videolan.vlc.gui.video.VideoPlayerActivity
-import org.videolan.vlc.repository.SlaveRepository
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.FontCache
 import org.videolan.vlc.util.awaitMedialibraryStarted
@@ -172,7 +169,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private var lastPrevious = -1L
 
     private val mediaFactory = FactoryManager.getFactory(IMediaFactory.factoryId) as IMediaFactory
-    private val slaveRepository by lazy(LazyThreadSafetyMode.NONE) { SlaveRepository.getInstance(service) }
     lateinit var videoResumeStatus: ResumeStatus
     lateinit var audioResumeStatus: ResumeStatus
 
@@ -584,11 +580,8 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 }
             }
             media.setEventListener(this@PlaylistManager)
-            // Slaves (external audio/subtitles) must be attached to the media BEFORE playback
-            // starts, otherwise audio slaves don't follow seeks
-            player.setSlaves(media, mw)
             player.startPlayback(media, mediaplayerEventListener, start)
-            media.release()
+            player.setSlaves(media, mw)
             if (browserAudioActive) player.setVolume(0)
             newMedia = true
             determinePrevAndNextIndices()
@@ -602,45 +595,6 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private fun skipMedia() {
         if (currentIndex != nextIndex) next()
         else stop()
-    }
-
-    /**
-     * Attaches an external audio file to the currently playing media and restarts playback at
-     * the current position.
-     *
-     * The audio slave MUST be part of the IMedia before the player starts (see
-     * [PlayerController.setSlaves]): adding one at runtime with MediaPlayer.addSlave breaks the
-     * master/slave synchronization on seek — the video input resets to 00:00 and stalls while
-     * the external audio keeps playing. We therefore rebuild the media with the slave attached
-     * and restart where the user was.
-     */
-    fun addExternalAudio(uri: Uri, select: Boolean = true) = service.launch {
-        val mw = getCurrentMedia() ?: return@launch
-        val time = player.getCurrentTime()
-        val wasPlaying = player.isPlaying()
-        val previousTrackIds = player.getAudioTracks()?.map { it.getId() }?.toSet() ?: emptySet()
-        // Persist the resolved URI so the track is re-attached on future plays
-        slaveRepository.saveSlave(mw.location, IMedia.Slave.Type.Audio, 2, uri.toString()).join()
-
-        val media = mediaFactory.getFromUri(VLCInstance.getInstance(service), mw.uri)
-        media.addOption(":start-time=${time / 1000L}")
-        media.addOption(":no-sout-chromecast-video")
-        VLCOptions.setMediaOptions(media, ctx, mw.flags, PlaybackService.hasRenderer())
-        player.setSlaves(media, mw)
-        media.setEventListener(this@PlaylistManager)
-        newMedia = true
-        player.startPlayback(media, mediaplayerEventListener, time)
-        media.release()
-        if (!wasPlaying) pause()
-
-        // Select the external track once the new input exposes it (it is appended after the
-        // embedded ones). Harmless no-op if the engine already selected it.
-        repeat(100) {
-            delay(100)
-            val externalTrack = player.getAudioTracks()?.lastOrNull { it.getId() !in previousTrackIds } ?: return@repeat
-            player.setAudioTrack(externalTrack.getId())
-            return@launch
-        }
     }
 
     fun onServiceDestroyed() {
