@@ -78,7 +78,9 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     private var mediaplayerEventListener: MediaPlayerEventListener? = null
     internal suspend fun startPlayback(media: IMedia, listener: MediaPlayerEventListener, time: Long) {
         mediaplayerEventListener = listener
-        resetPlaybackState(time, media.duration)
+        withContext(Dispatchers.Main.immediate) {
+            resetPlaybackState(time, media.duration)
+        }
         mediaplayer.setEventListener(null)
         withContext(Dispatchers.IO) { if (!mediaplayer.isReleased) mediaplayer.media = media.apply { if (hasRenderer) parse() } }
         mediaplayer.setEventListener(this@PlayerController)
@@ -93,6 +95,7 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     }
 
     private fun resetPlaybackState(time: Long, duration: Long) {
+        // safe to call updateProgress since the calling coroutine will be on the main dispatcher when used
         seekable = true
         pausable = true
         lastTime = time
