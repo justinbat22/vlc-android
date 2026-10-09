@@ -41,6 +41,18 @@
                 android:summary="%s"
                 android:persistent="true"
                 android:title="@string/subtitles_size_title" />
+        <SeekBarPreference
+                android:defaultValue="8"
+                android:iconSpaceReserved="false"
+                android:key="subtitles_position"
+                android:max="500"
+                android:summary="@string/subtitles_position_summary"
+                android:title="@string/subtitles_position_title"
+                app:iconSpaceReserved="false"
+                app:min="0"
+                app:seekBarIncrement="1"
+                app:showSeekBarValue="true"
+                app:updatesContinuously="true" />
         <CheckBoxPreference
                 android:defaultValue="false"
                 android:key="subtitles_bold"

@@ -13,4 +13,143 @@
     </style>
 
     <style name="Theme.VLC.PickerDialog" parent="Theme.VLC.PickerDialog.Dark"/>
+
+    <!--
+        Dark variants of the interface accent overlays (see values/styles.xml).
+        The brighter 500 shade is used on the dark background for readability.
+    -->
+    <style name="ThemeOverlay.VLC.Accent.Orange" parent="">
+        <item name="colorPrimary">@color/accent_orange_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_orange_500</item>
+        <item name="colorAccent">@color/accent_orange_500</item>
+        <item name="colorControlHighlight">@color/accent_orange_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_orange_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_orange_ripple</item>
+        <item name="audio_browser_separator">@color/accent_orange_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Blue" parent="">
+        <item name="colorPrimary">@color/accent_blue_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_blue_500</item>
+        <item name="colorAccent">@color/accent_blue_500</item>
+        <item name="colorControlHighlight">@color/accent_blue_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_blue_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_blue_ripple</item>
+        <item name="audio_browser_separator">@color/accent_blue_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Teal" parent="">
+        <item name="colorPrimary">@color/accent_teal_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_teal_500</item>
+        <item name="colorAccent">@color/accent_teal_500</item>
+        <item name="colorControlHighlight">@color/accent_teal_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_teal_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_teal_ripple</item>
+        <item name="audio_browser_separator">@color/accent_teal_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Green" parent="">
+        <item name="colorPrimary">@color/accent_green_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_green_500</item>
+        <item name="colorAccent">@color/accent_green_500</item>
+        <item name="colorControlHighlight">@color/accent_green_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_green_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_green_ripple</item>
+        <item name="audio_browser_separator">@color/accent_green_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Indigo" parent="">
+        <item name="colorPrimary">@color/accent_indigo_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_indigo_500</item>
+        <item name="colorAccent">@color/accent_indigo_500</item>
+        <item name="colorControlHighlight">@color/accent_indigo_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_indigo_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_indigo_ripple</item>
+        <item name="audio_browser_separator">@color/accent_indigo_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Purple" parent="">
+        <item name="colorPrimary">@color/accent_purple_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_purple_500</item>
+        <item name="colorAccent">@color/accent_purple_500</item>
+        <item name="colorControlHighlight">@color/accent_purple_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_purple_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_purple_ripple</item>
+        <item name="audio_browser_separator">@color/accent_purple_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Pink" parent="">
+        <item name="colorPrimary">@color/accent_pink_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_pink_500</item>
+        <item name="colorAccent">@color/accent_pink_500</item>
+        <item name="colorControlHighlight">@color/accent_pink_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_pink_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_pink_ripple</item>
+        <item name="audio_browser_separator">@color/accent_pink_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Red" parent="">
+        <item name="colorPrimary">@color/accent_red_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_red_500</item>
+        <item name="colorAccent">@color/accent_red_500</item>
+        <item name="colorControlHighlight">@color/accent_red_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_red_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_red_ripple</item>
+        <item name="audio_browser_separator">@color/accent_red_500</item>
+    </style>
+
+    <style name="ThemeOverlay.VLC.Accent.Cyan" parent="">
+        <item name="colorPrimary">@color/accent_cyan_500</item>
+        <item name="colorPrimaryDark">@color/transparent</item>
+        <item name="colorSecondary">@color/accent_cyan_500</item>
+        <item name="colorAccent">@color/accent_cyan_500</item>
+        <item name="colorControlHighlight">@color/accent_cyan_500</item>
+        <item name="colorOnSecondary">@color/grey50</item>
+        <item name="primary_focus">@color/accent_cyan_focus</item>
+        <item name="bottom_navigation_focus">@color/accent_cyan_ripple</item>
+        <item name="audio_browser_separator">@color/accent_cyan_500</item>
+    </style>
+
+    <!--
+        AMOLED overlay: forces the dark theme backgrounds to pure black.
+        android:colorBackground is the default background of the framework widgets (the
+        preference lists for instance), bottom_navigation_background the home bottom bar and the
+        system bar colours the status and navigation bars, so they are all turned black to keep
+        the whole interface AMOLED.
+    -->
+    <style name="ThemeOverlay.VLC.Amoled" parent="">
+        <item name="android:windowBackground">@color/black</item>
+        <item name="android:colorBackground">@color/black</item>
+        <item name="android:statusBarColor">@color/black</item>
+        <item name="android:navigationBarColor">@color/black</item>
+        <item name="background_default">@color/black</item>
+        <item name="background_default_darker">@color/black</item>
+        <item name="header_background">@color/black</item>
+        <item name="background_actionbar">@color/black</item>
+        <item name="card_background">@color/black</item>
+        <item name="bottom_sheet_background">@color/black</item>
+        <item name="bottom_navigation_background">@color/black</item>
+        <item name="tips_item_background">@color/black</item>
+        <item name="empty_background">@color/black</item>
+        <item name="audio_header_background">@color/black</item>
+        <item name="background_audio_tips">@color/black</item>
+        <item name="permission_explanation_background">@color/black</item>
+        <item name="swipe_refresh_background">@color/black</item>
+    </style>
 </resources>

@@ -63,6 +63,7 @@ import org.videolan.tools.KEY_SUBTITLES_OUTLINE
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR_OPACITY
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_SIZE
+import org.videolan.tools.KEY_SUBTITLES_POSITION
 import org.videolan.tools.KEY_SUBTITLES_SHADOW
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR_OPACITY
@@ -194,6 +195,15 @@ object VLCOptions {
                     options.add("--freetype-outline-opacity=$freetypeOutlineOpacity")
             } else options.add("--freetype-outline-opacity=0")
 
+            // Force the vertical position of the subtitles: a positive value pushes the text up
+            // from the bottom of the video, which keeps text subtitles (SRT, ...) on the screen
+            // when the video is scaled or cropped, a negative one pushes it down. Like the text
+            // renderer options above it is an instance option, so the video output of every media
+            // inherits it, and libvlc is the one that decides what the text can be moved over: the
+            // VLC 3 engine keeps it inside the video image, the VLC 4 engine places it on the
+            // display (black bars included) when spu-fill is on, which is its default.
+            val subtitlesPosition = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
+            if (subtitlesPosition != 0) options.add("--sub-margin=$subtitlesPosition")
 
             if (opengl == 1) options.add("--vout=gles2,none")
             else if (opengl == 0) options.add("--vout=android_display,none")
@@ -243,6 +253,9 @@ object VLCOptions {
             if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "VLC Options: ${options.joinToString(" ")}")
             return options
         }
+
+    /** Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the video. */
+    const val DEFAULT_SUBTITLES_POSITION = 8
 
     fun isAudioDigitalOutputEnabled(pref: SharedPreferences) = pref.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, false)
 

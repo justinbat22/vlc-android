@@ -36,6 +36,8 @@ import androidx.preference.TwoStatePreference
 import org.videolan.medialibrary.Tools
 import org.videolan.medialibrary.interfaces.Medialibrary
 import org.videolan.resources.AndroidDevices
+import org.videolan.tools.KEY_ACCENT_COLOR
+import org.videolan.tools.KEY_AMOLED_THEME
 import org.videolan.tools.KEY_APP_THEME
 import org.videolan.tools.KEY_ARTISTS_SHOW_ALL
 import org.videolan.tools.KEY_BLACK_THEME
@@ -165,6 +167,10 @@ class PreferencesUi : BasePreferenceFragment(), SharedPreferences.OnSharedPrefer
             }
             KEY_APP_THEME -> {
                 UiTools.restartDialog(requireActivity())
+            }
+            KEY_AMOLED_THEME, KEY_ACCENT_COLOR -> {
+                // Applied when the activities are recreated, which happens when leaving settings
+                (activity as PreferencesActivity).setRestart()
             }
             LIST_TITLE_ELLIPSIZE -> {
                 Settings.listTitleEllipsize = sharedPreferences.getString(LIST_TITLE_ELLIPSIZE, "0")?.toInt() ?: 0

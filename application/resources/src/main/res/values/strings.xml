@@ -374,6 +374,19 @@
     <string name="screen_orientation_landscape_sensor">Landscape (sensor)</string>
     <string name="screen_orientation_last_locked">Last locked orientation</string>
     <string name="enable_black_theme">Black theme</string>
+    <string name="enable_amoled_theme">Enable AMOLED theme</string>
+    <string name="enable_amoled_theme_summary">Use a pure black background in the dark theme. The home bottom bar keeps its colour.</string>
+    <string name="interface_accent_color">Interface colour</string>
+    <string name="interface_accent_color_summary">Colour used across the interface. The app needs to restart to apply it.</string>
+    <string name="accent_color_orange">Orange (default)</string>
+    <string name="accent_color_blue">Blue</string>
+    <string name="accent_color_teal">Teal</string>
+    <string name="accent_color_green">Green</string>
+    <string name="accent_color_indigo">Indigo</string>
+    <string name="accent_color_purple">Purple</string>
+    <string name="accent_color_pink">Pink</string>
+    <string name="accent_color_red">Red</string>
+    <string name="accent_color_cyan">Cyan</string>
     <string name="dark_theme">Dark theme</string>
     <string name="theme_auto">Auto theme</string>
     <string name="subtitle_text_encoding">Subtitle text encoding</string>
@@ -451,6 +464,9 @@
 
     <string name="subtitles_prefs_category">Subtitles</string>
     <string name="subtitles_size_title">Subtitles Size</string>
+    <string name="subtitles_position_title">Subtitle position</string>
+    <string name="subtitles_position_summary">Distance from the bottom of the video, in pixels: a positive value moves the subtitles up, which keeps them on the screen when the video is scaled. 0 keeps the default position.</string>
+    <string name="subtitle_settings">Subtitle settings</string>
     <string name="subtitles_presets_title">Subtitles presets</string>
     <string name="subtitles_size_nano">Nano</string>
     <string name="subtitles_size_micro">Micro</string>

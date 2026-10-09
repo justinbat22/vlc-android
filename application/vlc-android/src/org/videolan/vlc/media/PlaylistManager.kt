@@ -1,6 +1,7 @@
 package org.videolan.vlc.media
 
 import android.content.Intent
+import android.net.Uri
 import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import android.widget.Toast
@@ -88,6 +89,7 @@ import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
 import org.videolan.vlc.gui.browser.BaseBrowserFragment
 import org.videolan.vlc.gui.video.VideoPlayerActivity
+import org.videolan.vlc.repository.SlaveRepository
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.FontCache
 import org.videolan.vlc.util.awaitMedialibraryStarted
@@ -155,6 +157,12 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private var preBrowserVolume = -1
     private var parsed = false
     var savedTime = 0L
+
+    /**
+     * Start time, in milliseconds, that [restart] wants the media it reloads to resume at, or -1.
+     * Consumed by [getStartTime], so a reloaded playback resumes exactly where it was interrupted.
+     */
+    private var reloadStartTime = -1L
     private var random = SecureRandom()
     private var newMedia = false
     @Volatile
@@ -169,6 +177,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private var lastPrevious = -1L
 
     private val mediaFactory = FactoryManager.getFactory(IMediaFactory.factoryId) as IMediaFactory
+    private val slaveRepository by lazy(LazyThreadSafetyMode.NONE) { SlaveRepository.getInstance(service) }
     lateinit var videoResumeStatus: ResumeStatus
     lateinit var audioResumeStatus: ResumeStatus
 
@@ -242,7 +251,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     @MainThread
-    suspend fun load(list: List<MediaWrapper>, position: Int, mlUpdate: Boolean = false, avoidErasingStop:Boolean = false) {
+    suspend fun load(list: List<MediaWrapper>, position: Int, mlUpdate: Boolean = false, avoidErasingStop:Boolean = false, forceResume: Boolean = false) {
         saveMediaList()
         savePosition()
         mediaList.removeEventListener(this@PlaylistManager)
@@ -273,7 +282,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         if (stopAfter < position) stopAfter = -1
         clearABRepeat()
         player.setRate(1.0f, false)
-        playIndex(currentIndex)
+        playIndex(currentIndex, forceResume = forceResume)
         service.onPlaylistLoaded()
         if (mlUpdate) {
             service.awaitMedialibraryStarted()
@@ -383,10 +392,63 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         launch { playIndex(currentIndex) }
     }
 
+    /**
+     * Rebuilds the current playback on the player's libvlc instance.
+     *
+     * The libvlc options (subtitle style, hardware decoding, ...) are only read when the input and
+     * its sub-objects are created, so a preference change can only be applied by rebuilding the
+     * playback. The playlist is kept so that the media that is playing is replayed right away, at
+     * the position it is at, instead of being stopped and left for the user to start again.
+     */
     fun restart() {
-        val isPlaying = player.isPlaying() && isAudioList()
+        // A paused playback is rebuilt too, otherwise the media would be left stopped (and the
+        // player closed) while the user is changing a preference
+        val wasActive = player.isPlaying() || player.isPaused()
+        val audioOnly = isAudioList()
+        val index = currentIndex
+        // stop() clears the playlist: keep a copy to reload it once the player is rebuilt
+        val playlist = if (wasActive) mediaList.copy else emptyList()
+        if (wasActive && !audioOnly) reloadStartTime = player.getCurrentTime()
         stop()
-        if (isPlaying) PlaybackService.loadLastAudio(service)
+        if (!wasActive || playlist.isEmpty()) return
+        // Audio keeps being restored from the saved playlist
+        if (audioOnly) {
+            PlaybackService.loadLastAudio(service)
+            return
+        }
+        launch { load(playlist, index, forceResume = true) }
+    }
+
+    /**
+     * Replays the current media on a freshly built player, at the position it is at.
+     *
+     * The libvlc options (subtitle style and position, hardware decoding, ...) are only read when
+     * the player, its input and its video output are created, and a new input reuses the video
+     * output of the previous one: the player itself has to be rebuilt to apply a preference change
+     * to the playback that is running. Unlike [restart] the playback is not stopped, so the video
+     * keeps playing instead of being left for the user to start again.
+     */
+    @MainThread
+    fun reload() {
+        if (!player.isPlaying() && !player.isPaused()) return
+        val mw = getCurrentMedia() ?: return
+        val index = currentIndex
+        // A rebuilt playback doesn't know where it was, nor whether it was paused
+        reloadStartTime = player.getCurrentTime()
+        val wasPaused = !player.isPlaying()
+        player.restart()
+        // The surface of the released player can't be used anymore: the UI hands its own to the new
+        // player before the media is played again (see [PlaybackService.Callback.onPlayerRebuilt])
+        service.notifyPlayerRebuilt()
+        launch {
+            if (wasPaused) mw.addFlags(MediaWrapper.MEDIA_PAUSED)
+            try {
+                playIndex(index, forceResume = true)
+            } finally {
+                // Pausing is a playback state, not a property of the media
+                if (wasPaused) mw.removeFlags(MediaWrapper.MEDIA_PAUSED)
+            }
+        }
     }
 
     fun stop(systemExit: Boolean = false, video: Boolean = false) {
@@ -580,8 +642,11 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
                 }
             }
             media.setEventListener(this@PlaylistManager)
-            player.startPlayback(media, mediaplayerEventListener, start)
+            // Slaves (external audio/subtitles) must be attached to the media BEFORE playback
+            // starts, otherwise audio slaves don't follow seeks
             player.setSlaves(media, mw)
+            player.startPlayback(media, mediaplayerEventListener, start)
+            media.release()
             if (browserAudioActive) player.setVolume(0)
             newMedia = true
             determinePrevAndNextIndices()
@@ -595,6 +660,20 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private fun skipMedia() {
         if (currentIndex != nextIndex) next()
         else stop()
+    }
+
+    /**
+     * Adds an external audio file to the currently playing media.
+     *
+     * The resolved URI is persisted so the track is picked up again on the next playbacks. The
+     * file is played by a companion player instead of a libvlc audio slave: an audio slave is a
+     * separate demuxer that doesn't follow the master input on seek (the video resets to 00:00
+     * and stalls while the external audio keeps playing). See [PlayerController.startExternalAudio].
+     */
+    fun addExternalAudio(uri: Uri, select: Boolean = true) = service.launch {
+        val mw = getCurrentMedia() ?: return@launch
+        slaveRepository.saveSlave(mw.location, IMedia.Slave.Type.Audio, 2, uri.toString()).join()
+        player.startExternalAudio(uri)
     }
 
     fun onServiceDestroyed() {
@@ -1019,6 +1098,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     fun getMedia(position: Int) = mediaList.getMedia(position)
 
     private fun getStartTime(mw: MediaWrapper) : Long {
+        // A playback rebuilt by [restart] resumes where it was interrupted
+        if (reloadStartTime >= 0L) {
+            val start = reloadStartTime
+            reloadStartTime = -1L
+            savedTime = 0L
+            return start
+        }
         val start = when {
             mw.hasFlag(MediaWrapper.MEDIA_FROM_START) -> {
                 mw.removeFlags(MediaWrapper.MEDIA_FROM_START)

@@ -717,6 +717,16 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
         fun update()
         fun onMediaEvent(event: IMedia.Event)
         fun onMediaPlayerEvent(event: MediaPlayer.Event)
+
+        /**
+         * Called when the libvlc player has been rebuilt, before the current media is played again.
+         *
+         * The surface a video was rendered on belongs to the player that was released with it, so
+         * the implementors have to attach their own surface to the new player (see
+         * [reloadPlayback]), otherwise the video stays black until the player is left and opened
+         * again.
+         */
+        fun onPlayerRebuilt() {}
     }
 
     private inner class LocalBinder : Binder() {
@@ -1502,6 +1512,24 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     private fun restartPlaylistManager() = playlistManager.restart()
     fun restartMediaPlayer() = playlistManager.player.restart()
 
+    /**
+     * Rebuilds the player and replays the current media at the position it is at, without stopping
+     * the playback.
+     *
+     * The libvlc options (subtitle style and position, hardware decoding, ...) are only read when
+     * the player, its input and its video output are created, and a new input reuses the video
+     * output of the previous one: rebuilding the player is what applies a preference change to the
+     * playback that is running. The UI attaches its video surfaces to the new player through
+     * [Callback.onPlayerRebuilt].
+     */
+    @MainThread
+    fun reloadPlayback() = playlistManager.reload()
+
+    /** Tells the UI to attach its video surfaces to the player that has just been rebuilt. */
+    internal fun notifyPlayerRebuilt() {
+        for (callback in callbacks) callback.onPlayerRebuilt()
+    }
+
     fun saveMediaMeta() = playlistManager.saveMediaMeta()
 
     fun isValidIndex(positionInPlaylist: Int) = playlistManager.isValidPosition(positionInPlaylist)
@@ -1863,11 +1891,20 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
     @MainThread
     fun addSubtitleTrack(uri: Uri, select: Boolean) = playlistManager.player.addSubtitleTrack(uri, select)
 
+    /**
+     * Adds an external audio track to the current media. The file is played by a companion
+     * player synchronized with the main one instead of a libvlc audio slave: audio slaves don't
+     * follow the master input on seek (the video resets to 00:00 and stalls).
+     */
     @MainThread
-    fun addAudioTrack(path: String, select: Boolean) = playlistManager.player.addAudioTrack(path, select)
+    fun addAudioTrack(uri: Uri, select: Boolean) = playlistManager.addExternalAudio(uri, select)
 
+    /**
+     * Stops the external audio companion player, if any, and gives the audio back to the embedded
+     * track. Call this when the user selects a real (embedded) audio track or disables the audio.
+     */
     @MainThread
-    fun addAudioTrack(uri: Uri, select: Boolean) = playlistManager.player.addAudioTrack(uri, select)
+    fun stopExternalAudio() = playlistManager.player.stopExternalAudio()
 
     @MainThread
     fun setSpuTrack(index: String) = playlistManager.setSpuTrack(index)

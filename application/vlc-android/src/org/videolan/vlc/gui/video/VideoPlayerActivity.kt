@@ -149,6 +149,7 @@ import org.videolan.tools.ENABLE_SCALE_GESTURE
 import org.videolan.tools.ENABLE_SEEK_BUTTONS
 import org.videolan.tools.ENABLE_SWIPE_SEEK
 import org.videolan.tools.ENABLE_VOLUME_GESTURE
+import org.videolan.tools.KEY_ACCENT_COLOR
 import org.videolan.tools.KEY_AUDIO_BOOST
 import org.videolan.tools.KEY_AUDIO_PREFERRED_LANGUAGE
 import org.videolan.tools.KEY_ENABLE_CLONE_MODE
@@ -201,6 +202,7 @@ import org.videolan.vlc.gui.dialogs.SleepTimerDialog
 import org.videolan.vlc.gui.dialogs.VLCBottomSheetDialogFragment.Companion.shouldInterceptRemote
 import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
 import org.videolan.vlc.gui.dialogs.showContext
+import org.videolan.vlc.gui.helpers.ACCENT_COLOR_DEFAULT
 import org.videolan.vlc.gui.helpers.BitmapUtil
 import org.videolan.vlc.gui.helpers.KeycodeListener
 import org.videolan.vlc.gui.helpers.PlayerKeyListenerDelegate
@@ -208,6 +210,8 @@ import org.videolan.vlc.gui.helpers.PlayerOptionsDelegate
 import org.videolan.vlc.gui.helpers.UiTools
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
 import org.videolan.vlc.gui.helpers.UiTools.showPinIfNeeded
+import org.videolan.vlc.gui.helpers.accentOverlayRes
+import org.videolan.vlc.gui.helpers.applyOverlay
 import org.videolan.vlc.gui.helpers.hf.StoragePermissionsDelegate
 import org.videolan.vlc.interfaces.IPlaybackSettingsController
 import org.videolan.vlc.media.NO_LENGTH_PROGRESS_MAX
@@ -529,6 +533,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Overlay the user-selected interface accent so the player chrome and seek bar match the app.
+        theme.applyOverlay(accentOverlayRes(Settings.getInstance(this).getString(KEY_ACCENT_COLOR, ACCENT_COLOR_DEFAULT)))
         super.onCreate(savedInstanceState)
 
         dialogsDelegate.observeDialogs(this, this)
@@ -1193,10 +1199,9 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         if (data.hasExtra(EXTRA_MRL)) {
             if (requestCode == PICK_AUDIO_FILE) {
                 val audioUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
+                // The service persists the resolved URI and plays it in a companion player so the
+                // video keeps seeking correctly, see PlaybackService.addAudioTrack
                 service?.addAudioTrack(getUri(audioUri) ?: audioUri, true)
-                service?.currentMediaWrapper?.let {
-                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Audio, 2, data.getStringExtra(EXTRA_MRL)!!)
-                }
                 addNextTrack = true
             } else {
                 val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
@@ -1573,6 +1578,23 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     override fun update() {
         if (service == null || !overlayDelegate.isPlaylistAdapterInitialized()) return
         playlistModel?.update()
+    }
+
+    /**
+     * The player is rebuilt when the libvlc options change (see [PlaybackService.reloadPlayback]).
+     *
+     * The surface the video was rendered on belongs to the player that was released with it, so
+     * the new player has to be given this activity's own surface, otherwise the video stays black
+     * until the player is left and opened again.
+     */
+    override fun onPlayerRebuilt() {
+        val player = service?.mediaplayer ?: return
+        if (displayManager.isOnRenderer) return
+        videoLayout?.let { layout ->
+            player.attachViews(layout, displayManager, true, false)
+            player.videoScale = if (isBenchmark) MediaPlayer.ScaleType.SURFACE_FILL
+            else MediaPlayer.ScaleType.entries[settings.getInt(VIDEO_RATIO, MediaPlayer.ScaleType.SURFACE_BEST_FIT.ordinal)]
+        }
     }
 
     override fun onMediaEvent(event: IMedia.Event) {

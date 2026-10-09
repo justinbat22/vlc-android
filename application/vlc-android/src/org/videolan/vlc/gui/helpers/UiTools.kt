@@ -30,6 +30,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.RenderEffect
 import android.graphics.Shader
@@ -133,6 +135,8 @@ import org.videolan.resources.TAG_ITEM
 import org.videolan.resources.TV_CONFIRMATION_ACTIVITY
 import org.videolan.resources.util.launchForeground
 import org.videolan.tools.BitmapCache
+import org.videolan.tools.KEY_ACCENT_COLOR
+import org.videolan.tools.KEY_AMOLED_THEME
 import org.videolan.tools.KEY_APP_THEME
 import org.videolan.tools.KEY_INCLUDE_MISSING
 import org.videolan.tools.KEY_INCOGNITO
@@ -1123,6 +1127,15 @@ fun BaseActivity.applyTheme() {
     }
 
     val string = settings.getString(KEY_APP_THEME, "-1")
+    // AMOLED only makes sense with the dark theme
+    val amoled = settings.getBoolean(KEY_AMOLED_THEME, false) && isDarkTheme(string)
+
+    // Overlay the user selected interface accent colour and, if enabled, the pure black AMOLED
+    // background on top of Theme.VLC / Theme.VLC.Black. This must happen before super.onCreate()
+    // so the views are inflated with the selected colours.
+    theme.applyOverlay(accentOverlayRes(settings.getString(KEY_ACCENT_COLOR, ACCENT_COLOR_DEFAULT)))
+    if (amoled) theme.applyOverlay(R.style.ThemeOverlay_VLC_Amoled)
+
     when (string) {
         "1" -> {
             window.setBackgroundDrawable(ContextCompat.getColor(this, R.color.white).toDrawable())
@@ -1130,12 +1143,59 @@ fun BaseActivity.applyTheme() {
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
         }
         "2" -> {
-            window.setBackgroundDrawable(ContextCompat.getColor(this, R.color.mini_player_dark).toDrawable())
+            window.setBackgroundDrawable(ContextCompat.getColor(this, if (amoled) R.color.black else R.color.mini_player_dark).toDrawable())
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
         }
     }
+    // The window background is resolved from the base theme when the window is created, before the
+    // overlays above are applied, so it has to be set on the window itself. This is what paints the
+    // activity and preference backgrounds, and, in edge-to-edge mode, the areas behind the status
+    // and navigation bars.
+    if (amoled) {
+        window.setBackgroundDrawable(ContextCompat.getColor(this, R.color.black).toDrawable())
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
+    }
     AppCompatDelegate.setDefaultNightMode(Integer.valueOf(string!!))
+}
+
+/** Default interface accent colour, matching the original orange theme. */
+const val ACCENT_COLOR_DEFAULT = "orange"
+
+/**
+ * Applies a theme overlay, forcing it over the attributes already defined by the activity theme,
+ * so the chosen accent colour wins over the one baked into Theme.VLC.
+ *
+ * [Resources.Theme.applyStyle] only exists in its forcing variant (`applyStyle(int, boolean)`,
+ * available since API 1), which is also the behaviour wanted here.
+ */
+internal fun Resources.Theme.applyOverlay(styleRes: Int) {
+    applyStyle(styleRes, true)
+}
+
+/**
+ * Tells whether the dark theme is currently in use, from the stored theme preference.
+ * [KEY_APP_THEME] stores an [AppCompatDelegate] night mode value ("-1" follow system, "1" light,
+ * "2" dark).
+ */
+private fun BaseActivity.isDarkTheme(themeValue: String?): Boolean = when (themeValue) {
+    "1" -> false
+    "2" -> true
+    else -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+}
+
+/** Maps the stored accent colour preference to its theme overlay. */
+internal fun accentOverlayRes(accent: String?): Int = when (accent) {
+    "blue" -> R.style.ThemeOverlay_VLC_Accent_Blue
+    "teal" -> R.style.ThemeOverlay_VLC_Accent_Teal
+    "green" -> R.style.ThemeOverlay_VLC_Accent_Green
+    "indigo" -> R.style.ThemeOverlay_VLC_Accent_Indigo
+    "purple" -> R.style.ThemeOverlay_VLC_Accent_Purple
+    "pink" -> R.style.ThemeOverlay_VLC_Accent_Pink
+    "red" -> R.style.ThemeOverlay_VLC_Accent_Red
+    "cyan" -> R.style.ThemeOverlay_VLC_Accent_Cyan
+    else -> R.style.ThemeOverlay_VLC_Accent_Orange
 }
 
 fun getTvIconRes(mediaLibraryItem: MediaLibraryItem) = when (mediaLibraryItem.itemType) {
