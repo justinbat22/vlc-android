@@ -464,6 +464,9 @@
 
     <string name="subtitles_prefs_category">Subtitles</string>
     <string name="subtitles_size_title">Subtitles Size</string>
+    <string name="subtitles_position_title">Subtitle position</string>
+    <string name="subtitles_position_summary">Distance from the bottom of the screen, in pixels. 0 disables it. Only text subtitles are moved: ASS/SSA subtitles keep their own position.</string>
+    <string name="subtitle_settings">Subtitle settings</string>
     <string name="subtitles_presets_title">Subtitles presets</string>
     <string name="subtitles_size_nano">Nano</string>
     <string name="subtitles_size_micro">Micro</string>

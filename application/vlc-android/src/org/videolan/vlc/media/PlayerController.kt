@@ -303,17 +303,29 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
      * Audio slaves are the exception: they are never attached to the media (that is what broke
      * seeking). Instead the persisted URI is kept in [pendingExternalAudioUri] so that
      * [startPlayback] can start the companion player. See [startExternalAudio].
+     *
+     * The subtitle files found here are also what [VLCOptions.applySubtitlePosition] uses to decide
+     * whether the forced subtitle position can be set on this media.
      */
     suspend fun setSlaves(media: IMedia, mw: MediaWrapper) {
         if (mediaplayer.isReleased) return
         val slaves = mw.slaves
-        slaves?.filter { it.type != IMedia.Slave.Type.Audio }?.forEach { slave -> media.addSlave(slave) }
+        // Subtitle files are collected to know whether the forced subtitle position may be applied
+        val subtitleFiles = ArrayList<String>()
+        slaves?.filter { it.type != IMedia.Slave.Type.Audio }?.forEach { slave ->
+            media.addSlave(slave)
+            if (slave.type == IMedia.Slave.Type.Subtitle) subtitleFiles.add(slave.uri)
+        }
         val persisted = slaveRepository.getSlaves(mw.location)
         persisted.filter { it.type != IMedia.Slave.Type.Audio }.forEach { slave ->
-            if (!slaves.contains(slave)) media.addSlave(slave)
+            if (!slaves.contains(slave)) {
+                media.addSlave(slave)
+                if (slave.type == IMedia.Slave.Type.Subtitle) subtitleFiles.add(slave.uri)
+            }
         }
         pendingExternalAudioUri = persisted.firstOrNull { it.type == IMedia.Slave.Type.Audio }?.uri?.let { Uri.parse(it) }
         slaves?.let { slaveRepository.saveSlaves(mw) }
+        VLCOptions.applySubtitlePosition(media, settings, subtitleFiles)
     }
 
     /**

@@ -43,6 +43,7 @@ import org.videolan.tools.KEY_SUBTITLES_OUTLINE
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR_OPACITY
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_SIZE
+import org.videolan.tools.KEY_SUBTITLES_POSITION
 import org.videolan.tools.KEY_SUBTITLES_SHADOW
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR_OPACITY
@@ -195,7 +196,7 @@ class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnShare
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            KEY_SUBTITLES_SIZE, KEY_SUBTITLES_BOLD, KEY_SUBTITLE_TEXT_ENCODING,
+            KEY_SUBTITLES_SIZE, KEY_SUBTITLES_POSITION, KEY_SUBTITLES_BOLD, KEY_SUBTITLE_TEXT_ENCODING,
             KEY_SUBTITLES_COLOR, KEY_SUBTITLES_COLOR_OPACITY,
             KEY_SUBTITLES_BACKGROUND_COLOR, KEY_SUBTITLES_BACKGROUND_COLOR_OPACITY, KEY_SUBTITLES_BACKGROUND,
             KEY_SUBTITLES_OUTLINE, KEY_SUBTITLES_OUTLINE_SIZE, KEY_SUBTITLES_OUTLINE_COLOR, KEY_SUBTITLES_OUTLINE_COLOR_OPACITY,

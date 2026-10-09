@@ -41,6 +41,7 @@ import org.videolan.vlc.gui.dialogs.JumpToTimeDialog
 import org.videolan.vlc.gui.dialogs.PlaybackSpeedDialog
 import org.videolan.vlc.gui.dialogs.SelectChapterDialog
 import org.videolan.vlc.gui.dialogs.SleepTimerDialog
+import org.videolan.vlc.gui.dialogs.SubtitleSettingsDialog
 import org.videolan.vlc.gui.dialogs.VLCBottomSheetDialogFragment
 import org.videolan.vlc.gui.dialogs.VideoControlsSettingsDialog
 import org.videolan.vlc.gui.helpers.UiTools.addToPlaylist
@@ -80,6 +81,7 @@ private const val ID_AUDIO_CONTROL_SETTING = 20L
 private const val ID_SAFE_MODE_LOCK = 21L
 private const val ID_SAFE_MODE_UNLOCK = 22L
 private const val ID_SHARE = 23L
+private const val ID_SUBTITLE_SETTINGS = 24L
 @SuppressLint("ShowToast")
 class PlayerOptionsDelegate(val activity: FragmentActivity, val service: PlaybackService, private val showABReapeat:Boolean = true)  {
 
@@ -132,6 +134,7 @@ class PlayerOptionsDelegate(val activity: FragmentActivity, val service: Playbac
             if (PinCodeDelegate.pinUnlocked.value == true) options.add(PlayerOption(ID_SAFE_MODE_LOCK, R.drawable.ic_pin_lock, res.getString(R.string.lock_with_pin)))
             if (Settings.safeMode && PinCodeDelegate.pinUnlocked.value == false) options.add(PlayerOption(ID_SAFE_MODE_UNLOCK, R.drawable.ic_pin_unlock, res.getString(R.string.unlock_with_pin)))
             options.add(PlayerOption(ID_VIDEO_CONTROL_SETTING, R.drawable.ic_video_controls, res.getString(R.string.control_setting)))
+            options.add(PlayerOption(ID_SUBTITLE_SETTINGS, R.drawable.ic_subtitles, res.getString(R.string.subtitle_settings)))
         } else if (!Settings.showTvUi) {
             options.add(PlayerOption(ID_SHARE, R.drawable.ic_share, res.getString(R.string.share_track_info)))
         }
@@ -263,6 +266,11 @@ class PlayerOptionsDelegate(val activity: FragmentActivity, val service: Playbac
                 hide()
                 val videoControlsSettingsDialog = VideoControlsSettingsDialog()
                 videoControlsSettingsDialog.show(activity.supportFragmentManager, "fragment_video_controls_settings")
+            }
+            ID_SUBTITLE_SETTINGS -> {
+                hide()
+                val subtitleSettingsDialog = SubtitleSettingsDialog()
+                subtitleSettingsDialog.show(activity.supportFragmentManager, "fragment_subtitle_settings")
             }
             ID_SHARE -> {
                 hide()
