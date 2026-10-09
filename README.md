@@ -1,6 +1,6 @@
 # VLC for Android
 
-This is the official **Android** port of [VLC](https://videolan.org/vlc/).
+This is the personal fork of **Android** port of [VLC](https://videolan.org/vlc/).
 
 VLC on Android plays all the same files as the classical version of VLC, and features a media database
 for Audio and Video files and stream.
