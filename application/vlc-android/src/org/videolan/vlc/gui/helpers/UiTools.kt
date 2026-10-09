@@ -1155,13 +1155,14 @@ fun BaseActivity.applyTheme() {
 const val ACCENT_COLOR_DEFAULT = "orange"
 
 /**
- * Applies a theme overlay, forcing it over the attributes already defined by the activity theme.
- * [Resources.Theme.applyStyle] only supports the forcing variant from API 21, so older devices
- * fall back to the non-forcing call.
+ * Applies a theme overlay, forcing it over the attributes already defined by the activity theme,
+ * so the chosen accent colour wins over the one baked into Theme.VLC.
+ *
+ * [Resources.Theme.applyStyle] only exists in its forcing variant (`applyStyle(int, boolean)`,
+ * available since API 1), which is also the behaviour wanted here.
  */
 internal fun Resources.Theme.applyOverlay(styleRes: Int) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) applyStyle(styleRes, true)
-    else applyStyle(styleRes)
+    applyStyle(styleRes, true)
 }
 
 /**
@@ -1169,7 +1170,7 @@ internal fun Resources.Theme.applyOverlay(styleRes: Int) {
  * [KEY_APP_THEME] stores an [AppCompatDelegate] night mode value ("-1" follow system, "1" light,
  * "2" dark).
  */
-private fun BaseActivity.isDarkTheme(themeValue: String): Boolean = when (themeValue) {
+private fun BaseActivity.isDarkTheme(themeValue: String?): Boolean = when (themeValue) {
     "1" -> false
     "2" -> true
     else -> resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
