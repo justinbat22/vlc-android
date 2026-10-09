@@ -63,11 +63,17 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
      * Re-applies [externalAudioDelay] once the companion player has an audio output: LibVLC only
      * honours `setAudioDelay` after the output exists, so a delay set before playback may be
      * dropped.
+     *
+     * The same event is used to realign the companion: opening the file and starting its audio
+     * output takes an unpredictable time, so it always starts a bit late.
      */
     private val externalAudioEventListener = MediaPlayer.EventListener { event ->
         if (event?.type == MediaPlayer.Event.Playing) {
             val companion = externalAudioPlayer
-            if (companion != null && !companion.isReleased) companion.setAudioDelay(externalAudioDelay)
+            if (companion != null && !companion.isReleased) {
+                companion.setAudioDelay(externalAudioDelay)
+                syncExternalAudio()
+            }
         }
     }
 
@@ -89,7 +95,13 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun play() {
         if (mediaplayer.hasMedia() && !mediaplayer.isReleased) mediaplayer.play()
-        externalAudioPlayer?.let { if (!it.isReleased) it.play() }
+        val companion = externalAudioPlayer
+        if (companion != null && !companion.isReleased) {
+            // The companion is left paused while the video is paused, so it may be behind (or ahead,
+            // when it kept playing): realign it before starting it so both start together
+            syncExternalAudio()
+            companion.play()
+        }
     }
 
     fun pause(): Boolean {
@@ -130,7 +142,9 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
             mediaplayer.play()
         }
         val externalAudio = pendingExternalAudioUri
-        if (externalAudio !== null) startExternalAudio(externalAudio, time) else stopExternalAudio()
+        // The media was just started: the companion must play, whatever the (not yet updated)
+        // playback state says
+        if (externalAudio !== null) startExternalAudio(externalAudio, time, play = true) else stopExternalAudio()
     }
 
     private fun resetPlaybackState(time: Long, duration: Long) {
@@ -325,8 +339,13 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
      * volume) so both stay in sync, and the embedded audio of the main player is muted so only the
      * external file is audible. Not available while casting, since a renderer is bound to a single
      * player.
+     *
+     * @param time the position, in milliseconds, the external file must start at.
+     * @param play whether the companion starts playing straight away. It mirrors the main playback
+     *   when the caller does not force it: the audio must not play on its own while the video is
+     *   paused, otherwise it runs ahead of the video and both end up out of sync.
      */
-    internal suspend fun startExternalAudio(uri: Uri, time: Long = getCurrentTime()) {
+    internal suspend fun startExternalAudio(uri: Uri, time: Long = getCurrentTime(), play: Boolean = shouldCompanionPlay()) {
         stopExternalAudio()
         if (mediaplayer.isReleased || hasRenderer) return
         pendingExternalAudioUri = uri
@@ -354,13 +373,48 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
             companion.setEventListener(externalAudioEventListener)
             companion.volume = volume
             companion.rate = mediaplayer.rate
-            companion.play()
+            // Mirror the main playback: an external audio selected while the video is paused must
+            // stay paused too, otherwise the audio plays on its own and runs ahead of the video
+            if (play) companion.play()
             // The delay may have been requested before the companion existed (global/BT delay)
             companion.setAudioDelay(externalAudioDelay)
         }
         // The external file takes over: mute the embedded audio of the main player by volume,
         // so it works with both the VLC 3 and VLC 4 flavors
         if (!mediaplayer.isReleased) mediaplayer.setVolume(0)
+    }
+
+    /**
+     * Tells whether the companion player of the external audio must be playing, i.e. whether the
+     * main playback is neither paused nor stopped.
+     *
+     * [playbackState] is updated from the libvlc events, so it lags behind a `play()` call: a
+     * playback that has just been started must be passed explicitly instead (see [startPlayback]).
+     */
+    private fun shouldCompanionPlay() = when (playbackState) {
+        PlaybackStateCompat.STATE_PAUSED,
+        PlaybackStateCompat.STATE_STOPPED,
+        PlaybackStateCompat.STATE_NONE -> false
+        else -> true
+    }
+
+    /**
+     * Realigns the companion player of the external audio on the position of the main player.
+     *
+     * The companion is a full libvlc player: it has to open the file and create its audio output
+     * before playing, which takes an unpredictable time, and its start position is only known to
+     * the second, so it always ends up slightly behind the video (by a different amount each time).
+     * Realigning it when it starts playing keeps both in sync. A seek costs a short flush, hence
+     * the small tolerance below which the drift is left alone.
+     */
+    private fun syncExternalAudio() {
+        val companion = externalAudioPlayer ?: return
+        if (companion.isReleased || mediaplayer.isReleased) return
+        val masterTime = mediaplayer.time
+        if (masterTime <= 0L) return
+        val companionTime = companion.time
+        if (companionTime < 0L || (companionTime - masterTime).absoluteValue > EXTERNAL_AUDIO_SYNC_TOLERANCE)
+            companion.setTime(masterTime, false)
     }
 
     /** Stops and releases the companion player used for the external audio, if any. */
@@ -482,7 +536,12 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     private val eventActor = actor<MediaPlayer.Event>(capacity = Channel.UNLIMITED, start = CoroutineStart.UNDISPATCHED) {
         for (event in channel) {
             when (event.type) {
-                MediaPlayer.Event.Playing -> playbackState = PlaybackStateCompat.STATE_PLAYING
+                MediaPlayer.Event.Playing -> {
+                    playbackState = PlaybackStateCompat.STATE_PLAYING
+                    // The external audio must follow the video whenever it (re)starts playing, e.g.
+                    // after a pause or a seek at open, so realign the companion on the new position
+                    syncExternalAudio()
+                }
                 MediaPlayer.Event.Paused -> playbackState = PlaybackStateCompat.STATE_PAUSED
                 MediaPlayer.Event.EncounteredError -> setPlaybackStopped()
                 MediaPlayer.Event.PausableChanged -> pausable = event.pausable
@@ -533,6 +592,12 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
 const val NO_LENGTH_PROGRESS_MAX = 1000
 class Progress(var time: Long = 0L, var length: Long = 0L)
+
+/**
+ * Drift, in milliseconds, tolerated between the external audio and the video before the companion
+ * player is realigned on the main player. Realigning costs a short audio flush.
+ */
+private const val EXTERNAL_AUDIO_SYNC_TOLERANCE = 100L
 
 /**
  * Id of the fake [VlcTrack] used to represent the external audio file in the audio tracks menu.
