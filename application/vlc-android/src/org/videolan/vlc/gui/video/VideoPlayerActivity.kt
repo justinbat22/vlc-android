@@ -1580,6 +1580,23 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         playlistModel?.update()
     }
 
+    /**
+     * The player is rebuilt when the libvlc options change (see [PlaybackService.reloadPlayback]).
+     *
+     * The surface the video was rendered on belongs to the player that was released with it, so
+     * the new player has to be given this activity's own surface, otherwise the video stays black
+     * until the player is left and opened again.
+     */
+    override fun onPlayerRebuilt() {
+        val player = service?.mediaplayer ?: return
+        if (displayManager.isOnRenderer) return
+        videoLayout?.let { layout ->
+            player.attachViews(layout, displayManager, true, false)
+            player.videoScale = if (isBenchmark) MediaPlayer.ScaleType.SURFACE_FILL
+            else MediaPlayer.ScaleType.entries[settings.getInt(VIDEO_RATIO, MediaPlayer.ScaleType.SURFACE_BEST_FIT.ordinal)]
+        }
+    }
+
     override fun onMediaEvent(event: IMedia.Event) {
         when (event.type) {
             IMedia.Event.ParsedChanged -> updateNavStatus()

@@ -159,6 +159,13 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
     fun restart() {
         val mp = mediaplayer
         val volume:Int? = if (!mp.isReleased) mp.volume else null
+        // The companion player of the external audio was created on the libvlc instance of the
+        // player that is released here: it is stopped, the next playback starts it again from
+        // [pendingExternalAudioUri]
+        stopExternalAudio()
+        // Silence the old player: it is released on a background thread and would otherwise keep
+        // playing, and rendering, on its own until it is freed
+        if (!mp.isReleased && mp.hasMedia()) mp.stop()
         mediaplayer = newMediaPlayer()
         volume?.let {
             if (it > 100) {

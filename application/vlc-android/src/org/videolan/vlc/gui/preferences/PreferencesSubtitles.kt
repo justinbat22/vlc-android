@@ -31,7 +31,10 @@ import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.SeekBarPreference
 import com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.videolan.resources.VLCInstance
 import org.videolan.tools.KEY_SUBTITLES_BACKGROUND
 import org.videolan.tools.KEY_SUBTITLES_BACKGROUND_COLOR
@@ -54,8 +57,9 @@ import org.videolan.tools.LocaleUtils
 import org.videolan.tools.LocaleUtils.getLocales
 import org.videolan.tools.Settings
 import org.videolan.vlc.BuildConfig
+import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
-import org.videolan.vlc.gui.helpers.restartMediaPlayer
+import org.videolan.vlc.isVLC4
 
 class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -146,6 +150,11 @@ class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnShare
             false
         }
 
+        // The VLC 4 engine places text subtitles on the display, which allows moving them down into
+        // the black bars; the VLC 3 engine keeps them inside the video image, so a negative value
+        // could not be honoured and the range stays positive there.
+        if (isVLC4()) findPreference<SeekBarPreference>(KEY_SUBTITLES_POSITION)?.min = -500
+
         updatePreferredSubtitleTrack()
         prepareLocaleList()
         managePreferenceVisibilities()
@@ -186,12 +195,29 @@ class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnShare
     override fun onStop() {
         super.onStop()
         if (valueChanged) {
-            lifecycleScope.launch {
-                VLCInstance.restart()
-                restartMediaPlayer()
-            }
+            valueChanged = false
+            applySubtitleSettings()
         }
         preferenceScreen.sharedPreferences!!.unregisterOnSharedPreferenceChangeListener(this)
+    }
+
+    /**
+     * Applies the subtitle settings that changed to the playback that is running.
+     *
+     * The libvlc options are only read when the player, its input and its video output are created,
+     * so the change is applied by rebuilding the player and replaying the current media where it is
+     * (see [PlaybackService.reloadPlayback]).
+     *
+     * This must not run in this fragment's lifecycle scope: the settings are usually changed from
+     * the player's own subtitle dialog, which is dismissed - and this fragment destroyed - right
+     * after [onStop] is called. The restart would then be cancelled before the player is rebuilt,
+     * and the new settings would only show up once the video was closed and opened again.
+     */
+    private fun applySubtitleSettings() {
+        GlobalScope.launch(Dispatchers.IO) {
+            VLCInstance.restart()
+            withContext(Dispatchers.Main) { PlaybackService.instance?.reloadPlayback() }
+        }
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {

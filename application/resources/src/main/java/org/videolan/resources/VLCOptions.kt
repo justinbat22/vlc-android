@@ -195,12 +195,15 @@ object VLCOptions {
                     options.add("--freetype-outline-opacity=$freetypeOutlineOpacity")
             } else options.add("--freetype-outline-opacity=0")
 
-            // Force the vertical position of the subtitles: a positive value pushes the text
-            // upwards from the bottom of the video, which keeps text subtitles (SRT, ...) on the
-            // screen when the video is scaled or cropped. Like the text renderer options above it
-            // is an instance option, so the video output of every media inherits it.
+            // Force the vertical position of the subtitles: a positive value pushes the text up
+            // from the bottom of the video, which keeps text subtitles (SRT, ...) on the screen
+            // when the video is scaled or cropped, a negative one pushes it down. Like the text
+            // renderer options above it is an instance option, so the video output of every media
+            // inherits it, and libvlc is the one that decides what the text can be moved over: the
+            // VLC 3 engine keeps it inside the video image, the VLC 4 engine places it on the
+            // display (black bars included) when spu-fill is on, which is its default.
             val subtitlesPosition = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
-            if (subtitlesPosition > 0) options.add("--sub-margin=$subtitlesPosition")
+            if (subtitlesPosition != 0) options.add("--sub-margin=$subtitlesPosition")
 
             if (opengl == 1) options.add("--vout=gles2,none")
             else if (opengl == 0) options.add("--vout=android_display,none")

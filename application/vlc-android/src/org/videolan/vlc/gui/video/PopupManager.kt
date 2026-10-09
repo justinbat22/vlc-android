@@ -84,6 +84,20 @@ class PopupManager(private val service: PlaybackService) : PlaybackService.Callb
         }
     }
 
+    /**
+     * The popup holds its own video surface, which belongs to the player that was released when the
+     * player is rebuilt (see [PlaybackService.reloadPlayback]): the rebuilt player is given this
+     * surface again, otherwise the video of the popup stays black.
+     */
+    override fun onPlayerRebuilt() {
+        val view = rootView ?: return
+        val vlcVout = service.vout ?: return
+        vlcVout.setVideoView(view.findViewById<View>(R.id.player_surface) as SurfaceView)
+        vlcVout.addCallback(this)
+        vlcVout.attachViews(this)
+        view.setVLCVOut(vlcVout)
+    }
+
     fun removePopup() {
         service.isInPiPMode.removeObserver(observer)
         // If the popup is killed from the x button, isInPiPMode will still be true

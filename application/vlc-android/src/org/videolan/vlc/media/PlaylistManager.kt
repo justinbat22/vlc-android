@@ -419,6 +419,38 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         launch { load(playlist, index, forceResume = true) }
     }
 
+    /**
+     * Replays the current media on a freshly built player, at the position it is at.
+     *
+     * The libvlc options (subtitle style and position, hardware decoding, ...) are only read when
+     * the player, its input and its video output are created, and a new input reuses the video
+     * output of the previous one: the player itself has to be rebuilt to apply a preference change
+     * to the playback that is running. Unlike [restart] the playback is not stopped, so the video
+     * keeps playing instead of being left for the user to start again.
+     */
+    @MainThread
+    fun reload() {
+        if (!player.isPlaying() && !player.isPaused()) return
+        val mw = getCurrentMedia() ?: return
+        val index = currentIndex
+        // A rebuilt playback doesn't know where it was, nor whether it was paused
+        reloadStartTime = player.getCurrentTime()
+        val wasPaused = !player.isPlaying()
+        player.restart()
+        // The surface of the released player can't be used anymore: the UI hands its own to the new
+        // player before the media is played again (see [PlaybackService.Callback.onPlayerRebuilt])
+        service.notifyPlayerRebuilt()
+        launch {
+            if (wasPaused) mw.addFlags(MediaWrapper.MEDIA_PAUSED)
+            try {
+                playIndex(index, forceResume = true)
+            } finally {
+                // Pausing is a playback state, not a property of the media
+                if (wasPaused) mw.removeFlags(MediaWrapper.MEDIA_PAUSED)
+            }
+        }
+    }
+
     fun stop(systemExit: Boolean = false, video: Boolean = false) {
         clearABRepeat()
         if (stopAfter != -1) Settings.getInstance(AppContextProvider.appContext).putSingle(AUDIO_STOP_AFTER, stopAfter)
