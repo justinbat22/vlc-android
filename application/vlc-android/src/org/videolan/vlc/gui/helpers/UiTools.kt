@@ -1148,6 +1148,15 @@ fun BaseActivity.applyTheme() {
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
         }
     }
+    // The window background is resolved from the base theme when the window is created, before the
+    // overlays above are applied, so it has to be set on the window itself. This is what paints the
+    // activity and preference backgrounds, and, in edge-to-edge mode, the areas behind the status
+    // and navigation bars.
+    if (amoled) {
+        window.setBackgroundDrawable(ContextCompat.getColor(this, R.color.black).toDrawable())
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = false
+    }
     AppCompatDelegate.setDefaultNightMode(Integer.valueOf(string!!))
 }
 

@@ -128,17 +128,23 @@
 
     <!--
         AMOLED overlay: forces the dark theme backgrounds to pure black.
-        The home bottom bar background (@drawable/bottom_navigation_background_dark) is
-        intentionally NOT overridden so it keeps its own colour.
+        android:colorBackground is the default background of the framework widgets (the
+        preference lists for instance), bottom_navigation_background the home bottom bar and the
+        system bar colours the status and navigation bars, so they are all turned black to keep
+        the whole interface AMOLED.
     -->
     <style name="ThemeOverlay.VLC.Amoled" parent="">
         <item name="android:windowBackground">@color/black</item>
+        <item name="android:colorBackground">@color/black</item>
+        <item name="android:statusBarColor">@color/black</item>
+        <item name="android:navigationBarColor">@color/black</item>
         <item name="background_default">@color/black</item>
         <item name="background_default_darker">@color/black</item>
         <item name="header_background">@color/black</item>
         <item name="background_actionbar">@color/black</item>
         <item name="card_background">@color/black</item>
         <item name="bottom_sheet_background">@color/black</item>
+        <item name="bottom_navigation_background">@color/black</item>
         <item name="tips_item_background">@color/black</item>
         <item name="empty_background">@color/black</item>
         <item name="audio_header_background">@color/black</item>
