@@ -157,6 +157,12 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     private var preBrowserVolume = -1
     private var parsed = false
     var savedTime = 0L
+
+    /**
+     * Start time, in milliseconds, that [restart] wants the media it reloads to resume at, or -1.
+     * Consumed by [getStartTime], so a reloaded playback resumes exactly where it was interrupted.
+     */
+    private var reloadStartTime = -1L
     private var random = SecureRandom()
     private var newMedia = false
     @Volatile
@@ -245,7 +251,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     }
 
     @MainThread
-    suspend fun load(list: List<MediaWrapper>, position: Int, mlUpdate: Boolean = false, avoidErasingStop:Boolean = false) {
+    suspend fun load(list: List<MediaWrapper>, position: Int, mlUpdate: Boolean = false, avoidErasingStop:Boolean = false, forceResume: Boolean = false) {
         saveMediaList()
         savePosition()
         mediaList.removeEventListener(this@PlaylistManager)
@@ -276,7 +282,7 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         if (stopAfter < position) stopAfter = -1
         clearABRepeat()
         player.setRate(1.0f, false)
-        playIndex(currentIndex)
+        playIndex(currentIndex, forceResume = forceResume)
         service.onPlaylistLoaded()
         if (mlUpdate) {
             service.awaitMedialibraryStarted()
@@ -386,10 +392,31 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         launch { playIndex(currentIndex) }
     }
 
+    /**
+     * Rebuilds the current playback on the player's libvlc instance.
+     *
+     * The libvlc options (subtitle style, hardware decoding, ...) are only read when the input and
+     * its sub-objects are created, so a preference change can only be applied by rebuilding the
+     * playback. The playlist is kept so that the media that is playing is replayed right away, at
+     * the position it is at, instead of being stopped and left for the user to start again.
+     */
     fun restart() {
-        val isPlaying = player.isPlaying() && isAudioList()
+        // A paused playback is rebuilt too, otherwise the media would be left stopped (and the
+        // player closed) while the user is changing a preference
+        val wasActive = player.isPlaying() || player.isPaused()
+        val audioOnly = isAudioList()
+        val index = currentIndex
+        // stop() clears the playlist: keep a copy to reload it once the player is rebuilt
+        val playlist = if (wasActive) mediaList.copy else emptyList()
+        if (wasActive && !audioOnly) reloadStartTime = player.getCurrentTime()
         stop()
-        if (isPlaying) PlaybackService.loadLastAudio(service)
+        if (!wasActive || playlist.isEmpty()) return
+        // Audio keeps being restored from the saved playlist
+        if (audioOnly) {
+            PlaybackService.loadLastAudio(service)
+            return
+        }
+        launch { load(playlist, index, forceResume = true) }
     }
 
     fun stop(systemExit: Boolean = false, video: Boolean = false) {
@@ -1039,6 +1066,13 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
     fun getMedia(position: Int) = mediaList.getMedia(position)
 
     private fun getStartTime(mw: MediaWrapper) : Long {
+        // A playback rebuilt by [restart] resumes where it was interrupted
+        if (reloadStartTime >= 0L) {
+            val start = reloadStartTime
+            reloadStartTime = -1L
+            savedTime = 0L
+            return start
+        }
         val start = when {
             mw.hasFlag(MediaWrapper.MEDIA_FROM_START) -> {
                 mw.removeFlags(MediaWrapper.MEDIA_FROM_START)

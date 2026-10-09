@@ -195,6 +195,12 @@ object VLCOptions {
                     options.add("--freetype-outline-opacity=$freetypeOutlineOpacity")
             } else options.add("--freetype-outline-opacity=0")
 
+            // Force the vertical position of the subtitles: a positive value pushes the text
+            // upwards from the bottom of the video, which keeps text subtitles (SRT, ...) on the
+            // screen when the video is scaled or cropped. Like the text renderer options above it
+            // is an instance option, so the video output of every media inherits it.
+            val subtitlesPosition = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
+            if (subtitlesPosition > 0) options.add("--sub-margin=$subtitlesPosition")
 
             if (opengl == 1) options.add("--vout=gles2,none")
             else if (opengl == 0) options.add("--vout=android_display,none")
@@ -245,45 +251,8 @@ object VLCOptions {
             return options
         }
 
-    /** Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the screen. */
+    /** Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the video. */
     const val DEFAULT_SUBTITLES_POSITION = 8
-
-    /**
-     * Subtitle formats that don't rely on libvlc's plain text renderer: ASS/SSA position their own
-     * text and PGS/VobSub/DVD subtitles are images. Both must keep their own placement, so they
-     * must never be moved by `sub-margin`.
-     */
-    private val NON_TEXT_SUBTITLE_EXTENSIONS = setOf("ass", "ssa", "pgs", "sup", "spu", "idx")
-
-    /**
-     * Forces the vertical position of the subtitles with libvlc's `sub-margin` option, so text
-     * subtitles (e.g. SRT) stay on the screen instead of following the scaled video.
-     *
-     * The option is attached to [media] itself: libvlc applies it to the input, and the video
-     * output of that media inherits it when it is created, so only the media that need it are
-     * affected (unlike a `--sub-margin` instance option which would move every subtitle).
-     *
-     * The margin is only applied when every subtitle source known for the media is a text one.
-     * ASS/SSA and image based subtitles are skipped since they carry their own positioning.
-     * Embedded subtitle tracks can't be classified before playback, hence a media without any
-     * external subtitle file is treated as a text one.
-     *
-     * @param subtitleUris the external subtitle files attached to the media.
-     */
-    fun applySubtitlePosition(media: IMedia, pref: SharedPreferences, subtitleUris: List<String>) {
-        val position = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
-        if (position <= 0) return
-        if (subtitleUris.any { isNonTextSubtitleFile(it) }) return
-        media.addOption(":sub-margin=$position")
-    }
-
-    private fun isNonTextSubtitleFile(uri: String): Boolean {
-        val extension = uri.substringAfterLast('.', "")
-                .substringBefore('?')
-                .substringBefore('#')
-                .lowercase()
-        return extension in NON_TEXT_SUBTITLE_EXTENSIONS
-    }
 
     fun isAudioDigitalOutputEnabled(pref: SharedPreferences) = pref.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, false)
 

@@ -45,7 +45,7 @@
                 android:defaultValue="8"
                 android:iconSpaceReserved="false"
                 android:key="subtitles_position"
-                android:max="200"
+                android:max="500"
                 android:summary="@string/subtitles_position_summary"
                 android:title="@string/subtitles_position_title"
                 app:iconSpaceReserved="false"
