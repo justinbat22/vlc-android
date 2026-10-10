@@ -24,6 +24,7 @@ import org.videolan.tools.KEY_EQUALIZER_ENABLED
 import org.videolan.tools.*
 import org.videolan.vlc.*
 import org.videolan.vlc.gui.dialogs.VideoTracksDialog
+import org.videolan.vlc.subtitleoverlay.SubtitleOverlayPrefs
 import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
 import org.videolan.vlc.repository.EqualizerRepository
 import org.videolan.vlc.repository.SlaveRepository
@@ -324,14 +325,25 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
      * Audio slaves are the exception: they are never attached to the media (that is what broke
      * seeking). Instead the persisted URI is kept in [pendingExternalAudioUri] so that
      * [startPlayback] can start the companion player. See [startExternalAudio].
+     *
+     * External subtitles are the other exception: when the screen-anchored overlay is enabled they
+     * are displayed by it instead (see SubtitleOverlayDelegate), so attaching them here would draw
+     * the same text twice.
      */
     suspend fun setSlaves(media: IMedia, mw: MediaWrapper) {
         if (mediaplayer.isReleased) return
+        val overlaySubtitles = SubtitleOverlayPrefs.isEnabled(context)
+        fun attachable(slave: IMedia.Slave) = slave.type != IMedia.Slave.Type.Audio &&
+                !(overlaySubtitles && slave.type == IMedia.Slave.Type.Subtitle)
         val slaves = mw.slaves
-        slaves?.filter { it.type != IMedia.Slave.Type.Audio }?.forEach { media.addSlave(it) }
+        slaves?.filter { attachable(it) }?.forEach { media.addSlave(it) }
         val persisted = slaveRepository.getSlaves(mw.location)
-        persisted.filter { it.type != IMedia.Slave.Type.Audio }.forEach { slave ->
-            if (!slaves.contains(slave)) media.addSlave(slave)
+        persisted.filter { attachable(it) }.forEach { slave ->
+            // A restored subtitle is offered as a track without asking VLC to pick it: VLC maps the
+            // slave priority onto its automatic selection (UNSELECTED_SLAVE_PRIORITY is VLC's
+            // "match none"), which is what the previous MediaPlayer.addSlave(..., false) did.
+            if (slaves?.contains(slave) != true)
+                media.addSlave(IMedia.Slave(slave.type, UNSELECTED_SLAVE_PRIORITY, slave.uri))
         }
         pendingExternalAudioUri = persisted.firstOrNull { it.type == IMedia.Slave.Type.Audio }?.uri?.let { Uri.parse(it) }
         slaves?.let { slaveRepository.saveSlaves(mw) }
@@ -611,6 +623,12 @@ private const val EXTERNAL_AUDIO_SYNC_TOLERANCE = 100L
  * It is deliberately not numeric (VLC uses "-1" for "disable track" and "-2" as a UI sentinel).
  */
 const val EXTERNAL_AUDIO_TRACK_ID = "external-audio"
+
+/**
+ * Priority restored subtitles are attached with. libvlc maps it to its "never auto-select" match
+ * rule: the file is available in the subtitle list but VLC doesn't pick it by itself.
+ */
+private const val UNSELECTED_SLAVE_PRIORITY = 0
 
 /**
  * Fake [VlcTrack] exposing the external audio file in the audio tracks menu so the current

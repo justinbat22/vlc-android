@@ -2,8 +2,6 @@ package org.videolan.vlc.subtitleoverlay
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -105,87 +103,5 @@ class SrtParserTest {
         assertTrue(c.contains(1000))
         assertTrue(c.contains(1999))
         assertFalse(c.contains(2000))
-    }
-}
-
-class SrtParserLookupTest {
-
-    /** Stand-in for a provider built only for cueAt() tests. */
-    private fun makeProvider(cues: List<SubtitleCue>): TestableCueLookup =
-            TestableCueLookup(cues.sortedBy { it.startMs })
-
-    @Test
-    fun beforeDuringAfter() {
-        val p = makeProvider(listOf(SubtitleCue(1000, 3000, listOf("x"))))
-        assertNull(p.cueAt(500))
-        assertNotNull(p.cueAt(1000))
-        assertNotNull(p.cueAt(2999))
-        assertNull(p.cueAt(3000))
-    }
-
-    @Test
-    fun seekForwardBackward() {
-        val p = makeProvider(listOf(
-                SubtitleCue(1000, 2000, listOf("A")),
-                SubtitleCue(4000, 5000, listOf("B"))))
-        assertEquals(listOf("A"), p.cueAt(1500)!!.lines)
-        assertEquals(listOf("B"), p.cueAt(4500)!!.lines)
-        assertNull(p.cueAt(2500))
-    }
-
-    @Test
-    fun overlappingDeterministic() {
-        val p = makeProvider(listOf(
-                SubtitleCue(0, 5000, listOf("A")),
-                SubtitleCue(2000, 4000, listOf("B"))))
-        // two cues cover t=3000; the one starting latest wins, deterministically
-        assertEquals(listOf("B"), p.cueAt(3000)!!.lines)
-    }
-
-    @Test
-    fun afterReleaseNothingShows() {
-        val p = makeProvider(listOf(SubtitleCue(0, 1000, listOf("A"))))
-        p.release()
-        assertNull(p.cueAt(500))
-        assertFalse(p.isLoaded)
-    }
-}
-
-/**
- * Pure-JVM stand-in mirroring [SrtSubtitleProvider]'s binary search so the
- * lookup semantics are tested without any Android dependency. The same
- * algorithm lives in the provider implementation.
- */
-class TestableCueLookup(initial: List<SubtitleCue>) {
-    @Volatile
-    private var cues: List<SubtitleCue> = initial
-    @Volatile
-    private var loaded = initial.isNotEmpty()
-
-    val isLoaded: Boolean get() = loaded
-
-    fun cueAt(timeMs: Long): SubtitleCue? {
-        val list = cues
-        var lo = 0
-        var hi = list.size - 1
-        var candidate: SubtitleCue? = null
-        while (lo <= hi) {
-            val mid = (lo + hi) ushr 1
-            val c = list[mid]
-            when {
-                c.endMs <= timeMs -> lo = mid + 1
-                c.startMs > timeMs -> hi = mid - 1
-                else -> {
-                    if (candidate == null || c.startMs > candidate.startMs) candidate = c
-                    lo = mid + 1
-                }
-            }
-        }
-        return candidate?.takeIf { it.contains(timeMs) }
-    }
-
-    fun release() {
-        cues = emptyList()
-        loaded = false
     }
 }

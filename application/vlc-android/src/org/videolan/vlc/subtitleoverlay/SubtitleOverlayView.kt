@@ -23,9 +23,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.ContextCompat
 import org.videolan.tools.Settings
-import org.videolan.tools.putSingle
 import kotlin.math.min
 
 /**
@@ -59,7 +57,7 @@ class SubtitleOverlayView @JvmOverloads constructor(
     /** Normalized anchor of the BOTTOM of the text block, 0.0 (top) .. 1.0 (bottom). */
     var positionPercent: Float = DEFAULT_POSITION
         set(value) {
-            field = value.coerceIn(0.05f, 1.0f)
+            field = value.coerceIn(MIN_POSITION, MAX_POSITION)
             invalidate()
         }
 
@@ -237,13 +235,19 @@ class SubtitleOverlayView @JvmOverloads constructor(
         return out
     }
 
-    fun persistPosition() {
-        Settings.getInstance(context).putSingle(PREF_OVERLAY_POSITION, positionPercent)
-    }
+    fun persistPosition() = SubtitleOverlayPrefs.setPosition(context, positionPercent)
 
     companion object {
-        /** Preference key holding [positionPercent] as FloatIntBits (see Settings). */
+        /** Preference key holding [positionPercent] (as a percent, see SubtitleOverlayPrefs). */
         const val PREF_OVERLAY_POSITION = "subtitle_overlay_position"
+
+        /** Highest positionPercent the overlay can be moved down to (bottom of the container). */
+        const val MAX_POSITION = 1.0f
+
+        /** Lowest positionPercent the overlay can be moved up to. */
+        const val MIN_POSITION = 0.05f
+
+        /** Default anchor: the text rests near the bottom inset of the container. */
         const val DEFAULT_POSITION = 0.98f
     }
 }

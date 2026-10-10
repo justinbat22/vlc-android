@@ -263,8 +263,12 @@ object VLCOptions {
             return options
         }
 
-    /** Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the video. */
-    const val DEFAULT_SUBTITLES_POSITION = 8
+    /**
+     * Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the video.
+     * 0 means VLC's own default position: no `--sub-margin` option is added, so builds that
+     * never touch the preference keep the subtitles exactly where upstream puts them.
+     */
+    const val DEFAULT_SUBTITLES_POSITION = 0
 
     fun isAudioDigitalOutputEnabled(pref: SharedPreferences) = pref.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, false)
 

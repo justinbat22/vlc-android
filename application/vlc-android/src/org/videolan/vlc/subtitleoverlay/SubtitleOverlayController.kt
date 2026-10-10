@@ -28,7 +28,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.videolan.libvlc.MediaPlayer
-import org.videolan.tools.Settings
 import java.nio.charset.Charset
 
 private const val TAG = "SubtitleOverlay"
@@ -74,7 +73,6 @@ class SubtitleOverlayController(
 ) : CoroutineScope {
 
     override val coroutineContext = Dispatchers.Main.immediate + SupervisorJob()
-    private val settings = Settings.getInstance(owner)
 
     companion object {
         /** Preference key for the overlay enable state. */
@@ -86,26 +84,26 @@ class SubtitleOverlayController(
     private var loadJob: Job? = null
     private var lastCue: SubtitleCue? = null
 
-    /** Native track id the overlay displaced (restored on overlay exit), or null. */
-    private var suppressedNativeTrack: String? = null
-
     /** True while a source is loaded. */
     var enabled: Boolean = false
         private set
 
     fun start() {
         overlayView.refreshAppearance()
-        overlayView.positionPercent = settings.getFloat(
-                SubtitleOverlayView.PREF_OVERLAY_POSITION,
-                SubtitleOverlayView.DEFAULT_POSITION)
+        overlayView.positionPercent = SubtitleOverlayPrefs.position(owner)
     }
 
     /**
      * Loads an external .srt and shows it in sync with the current playback.
      * The file is NOT passed to VLC, so the native renderer shows nothing for it.
+     *
+     * @param onResult called on the main thread with `true` once the file is displayed, `false`
+     *   when it could not be read (or nothing usable was parsed). A load superseded by a newer one
+     *   reports nothing.
      */
-    fun loadExternal(uri: Uri, charset: Charset? = null) {
+    fun loadExternal(uri: Uri, charset: Charset? = null, onResult: ((Boolean) -> Unit)? = null) {
         loadJob?.cancel()
+        provider?.release()
         val trackId = "$EXTERNAL_CUE_TRACK_PREFIX${uri}"
         val p = SrtSubtitleProvider(uri, trackId, owner, charset)
         provider = p
@@ -125,6 +123,7 @@ class SubtitleOverlayController(
                     overlayView.setCue(null)
                     enabled = false
                 }
+                onResult?.invoke(count > 0)
             }
         }
     }

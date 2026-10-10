@@ -477,7 +477,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private val downloadedSubtitleObserver = Observer<List<org.videolan.vlc.mediadb.models.ExternalSub>> { externalSubs ->
         for (externalSub in externalSubs) {
             if (!addedExternalSubs.contains(externalSub)) {
-                service?.addSubtitleTrack(externalSub.subtitlePath, currentSpuTrack == "-2")
+                val subtitlePath = externalSub.subtitlePath
+                // The overlay displays the downloaded subtitle when it handles it; otherwise VLC does
+                if (subtitleOverlayDelegate.handlesExternalSubtitle(subtitlePath))
+                    subtitleOverlayDelegate.handlePickedSubtitle(subtitlePath, saveForMedia = false)
+                else service?.addSubtitleTrack(subtitlePath, currentSpuTrack == "-2")
                 addedExternalSubs.add(externalSub)
             }
         }
@@ -1208,11 +1212,19 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 addNextTrack = true
             } else {
                 val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
-                service?.addSubtitleTrack(getUri(subtitleUri) ?: subtitleUri, false)
-                service?.currentMediaWrapper?.let {
-                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+                val resolvedSubtitle = getUri(subtitleUri) ?: subtitleUri
+                if (subtitleOverlayDelegate.handlesExternalSubtitle(resolvedSubtitle.toString())) {
+                    // The overlay draws the picked subtitle itself: the file is not attached to VLC
+                    // as a slave, and no native track is selected for it (setting [addNextTrack]
+                    // would make the next ESAdded(Text) event select an embedded track instead)
+                    subtitleOverlayDelegate.handlePickedSubtitle(resolvedSubtitle.toString())
+                } else {
+                    service?.addSubtitleTrack(resolvedSubtitle, false)
+                    service?.currentMediaWrapper?.let {
+                        SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+                    }
+                    addNextTrack = true
                 }
-                addNextTrack = true
             }
         } else if (BuildConfig.DEBUG) Log.d(TAG, "Subtitle selection dialog was cancelled")
     }
@@ -1617,7 +1629,10 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 MediaPlayer.Event.Opening -> {
                     forcedTime = -1
                     if (!subtitlesExtraPath.isNullOrEmpty()) {
-                        service.addSubtitleTrack(subtitlesExtraPath!!, true)
+                        val extraSubtitle = subtitlesExtraPath!!
+                        if (subtitleOverlayDelegate.handlesExternalSubtitle(extraSubtitle))
+                            subtitleOverlayDelegate.handlePickedSubtitle(extraSubtitle, saveForMedia = false)
+                        else service.addSubtitleTrack(extraSubtitle, true)
                         subtitlesExtraPath = null
                     }
                 }
@@ -1686,6 +1701,13 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                                     @Suppress("UNCHECKED_CAST")
                                     if ((tracks as Array<VlcTrack>).isNotEmpty()) service.setSpuTrack(tracks[tracks.size - 1].getId())
                                     addNextTrack = false
+                                } else if (subtitleOverlayDelegate.rendersSubtitle) {
+                                    // The overlay draws the external subtitle of this media: keeping
+                                    // VLC's rendering off is what prevents the same text from being
+                                    // drawn twice
+                                    withContext(Dispatchers.Main) {
+                                        subtitleOverlayDelegate.onNativeSubtitleAutoSelected(spuTrack)
+                                    }
                                 } else if (spuTrack != "0" || currentSpuTrack != "-2") {
                                     service.setSpuTrack(spuTrack)
                                     lastSpuTrack = "-2"
@@ -2169,7 +2191,12 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             lastAudioTrack = "-2"
         }
         if (lastSpuTrack >=" -1") {
-            service?.setSpuTrack(lastSpuTrack)
+            // The overlay draws the external subtitle of this media: VLC's own subtitle track stays
+            // off, and the track that was about to be restored is remembered by the delegate, which
+            // gives it back when the overlay stops (see SubtitleOverlayDelegate.release)
+            if (subtitleOverlayDelegate.rendersSubtitle)
+                subtitleOverlayDelegate.onNativeSubtitleAutoSelected(lastSpuTrack)
+            else service?.setSpuTrack(lastSpuTrack)
             lastSpuTrack = "-2"
         }
     }
@@ -2254,7 +2281,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 positionInPlaylist = extras.getInt(PLAY_EXTRA_OPENED_POSITION, -1)
 
                 subtitlesExtraPath = extras.getString(PLAY_EXTRA_SUBTITLES_LOCATION)
-                if (!subtitlesExtraPath.isNullOrEmpty()) service.addSubtitleTrack(subtitlesExtraPath!!, true)
+                // The overlay takes the subtitle over when it is enabled and handles the format: it
+                // is loaded when the media starts (see the Opening event), once the media it belongs
+                // to is known
+                if (!subtitlesExtraPath.isNullOrEmpty() && !subtitleOverlayDelegate.handlesExternalSubtitle(subtitlesExtraPath))
+                    service.addSubtitleTrack(subtitlesExtraPath!!, true)
                 if (intent.hasExtra(PLAY_EXTRA_ITEM_TITLE))
                     itemTitle = extras.getString(PLAY_EXTRA_ITEM_TITLE)
             }

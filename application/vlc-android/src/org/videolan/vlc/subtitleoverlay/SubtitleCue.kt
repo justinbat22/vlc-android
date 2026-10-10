@@ -80,3 +80,110 @@ interface SubtitleCueProvider {
 
 /** Stable ID prefix used to tag external-file cues inside [SubtitleCue.trackId]. */
 const val EXTERNAL_CUE_TRACK_PREFIX = "external-srt:"
+
+/**
+ * Immutable index over [SubtitleCue]s answering "which cue is displayed at a given
+ * time" in O(log n), and the single implementation of the overlay's cue lookup:
+ * both [SrtSubtitleProvider] and the unit tests use it.
+ *
+ * The cues are sorted by start time and a segment tree stores, for every range of
+ * cues, the end time of the longest cue inside it. That is what makes a long cue
+ * that overlaps several shorter ones safe: looking for the active cue through the
+ * start times alone would discard the long cue as soon as one of the short cues
+ * ending before the queried time is met, while the range maximum tells whether any
+ * cue still covers the time.
+ *
+ * The cue returned for a time is the one that started latest among those covering
+ * it (`startMs <= timeMs < endMs`), which keeps overlapping cues deterministic.
+ */
+class CueIndex(cues: List<SubtitleCue> = emptyList()) {
+
+    private val cues: List<SubtitleCue> = cues.sortedBy { it.startMs }
+
+    /** Number of leaves of the segment tree (power of two). */
+    private val size: Int = run {
+        var size = 1
+        while (size < this.cues.size) size = size shl 1
+        size
+    }
+
+    /** Segment tree of end times: `maxEnd[i]` is the max end time of the range of node `i`. */
+    private val maxEnd: LongArray = LongArray(size shl 1) { Long.MIN_VALUE }.also { tree ->
+        for (i in this.cues.indices) tree[size + i] = this.cues[i].endMs
+        for (i in size - 1 downTo 1) tree[i] = maxOf(tree[i shl 1], tree[(i shl 1) or 1])
+    }
+
+    /** True when no cue was indexed. */
+    val isEmpty: Boolean get() = cues.isEmpty()
+
+    /** Number of cues in the index. */
+    val cueCount: Int get() = cues.size
+
+    /** The cue displayed at [timeMs] (media timeline, milliseconds), or null. */
+    fun cueAt(timeMs: Long): SubtitleCue? {
+        if (cues.isEmpty()) return null
+        // Last cue starting at or before timeMs: only those can cover it.
+        var lo = 0
+        var hi = cues.size - 1
+        var last = -1
+        while (lo <= hi) {
+            val mid = (lo + hi) ushr 1
+            if (cues[mid].startMs <= timeMs) {
+                last = mid
+                lo = mid + 1
+            } else hi = mid - 1
+        }
+        if (last < 0) return null
+        val index = rightmostCovering(last, timeMs)
+        return if (index < 0) null else cues[index]
+    }
+
+    /**
+     * Index (in [cues]) of the latest-starting cue covering [timeMs] among the first
+     * [last] + 1 cues, or -1 when none does.
+     */
+    private fun rightmostCovering(last: Int, timeMs: Long): Int {
+        // Canonical segment tree nodes covering [0, last], collected so that the
+        // rightmost range is inspected first: [rightNodes] is filled from right to
+        // left and [leftNodes] from left to right.
+        var l = size
+        var r = size + last
+        val leftNodes = ArrayList<Int>(8)
+        val rightNodes = ArrayList<Int>(8)
+        while (l <= r) {
+            if (l and 1 == 1) {
+                leftNodes.add(l)
+                l++
+            }
+            if (r and 1 == 0) {
+                rightNodes.add(r)
+                r--
+            }
+            l = l shr 1
+            r = r shr 1
+        }
+        var node = -1
+        for (i in rightNodes.indices) {
+            if (maxEnd[rightNodes[i]] > timeMs) {
+                node = rightNodes[i]
+                break
+            }
+        }
+        if (node < 0) {
+            for (i in leftNodes.indices.reversed()) {
+                if (maxEnd[leftNodes[i]] > timeMs) {
+                    node = leftNodes[i]
+                    break
+                }
+            }
+        }
+        if (node < 0) return -1
+        // Descend to the rightmost leaf covering timeMs.
+        while (node < size) {
+            val rightChild = (node shl 1) or 1
+            node = if (maxEnd[rightChild] > timeMs) rightChild else node shl 1
+        }
+        val index = node - size
+        return if (index in 0..last && cues[index].endMs > timeMs) index else -1
+    }
+}

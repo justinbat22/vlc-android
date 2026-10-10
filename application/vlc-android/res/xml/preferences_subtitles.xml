@@ -63,7 +63,7 @@
                 android:persistent="true"
                 android:title="@string/subtitles_size_title" />
         <SeekBarPreference
-                android:defaultValue="8"
+                android:defaultValue="0"
                 android:iconSpaceReserved="false"
                 android:key="subtitles_position"
                 android:max="500"

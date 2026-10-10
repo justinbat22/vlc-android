@@ -295,6 +295,9 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
                 }
                 VideoTracksDialog.TrackType.SPU -> {
                     player.service?.let { service ->
+                        // An explicit subtitle choice wins over the screen-anchored overlay: it stops
+                        // drawing the external subtitle so VLC renders the entry the user picked
+                        player.subtitleOverlayDelegate.onNativeSubtitleSelected(trackID)
                         if (isVLC4() && trackID == "-1")
                             service.unselectTrackType(trackType)
                         else

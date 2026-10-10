@@ -1012,9 +1012,6 @@
                 android:theme="@style/Theme.VLC"
                 android:windowSoftInputMode="stateVisible" />
         <activity
-            android:name=".gui.BetaWelcomeActivity"
-            android:theme="@style/Theme.VLC.SendCrashDialog"/>
-        <activity
             android:name=".gui.browser.FilePickerActivity"
             android:theme="@style/Theme.VLC.PickerDialog"/>
         <activity

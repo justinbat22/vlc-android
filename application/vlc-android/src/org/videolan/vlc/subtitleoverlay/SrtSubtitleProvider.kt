@@ -29,8 +29,8 @@ import java.nio.charset.Charset
 
 /**
  * [SubtitleCueProvider] reading an external .srt file (a local file path or a
- * content URI). Everything is loaded once into memory sorted by start time,
- * then cue lookup is an O(log n) binary search, so a 100k-cue file costs a
+ * content URI). Everything is loaded once into memory into a [CueIndex], which
+ * answers cue lookups with an O(log n) range query, so a 100k-cue file costs a
  * handful of comparisons per TimeChanged event.
  */
 class SrtSubtitleProvider(
@@ -40,10 +40,9 @@ class SrtSubtitleProvider(
         private val charset: Charset? = null
 ) : SubtitleCueProvider {
 
-    private var cues: List<SubtitleCue> = emptyList()
-    override val isLoaded: Boolean get() = loaded
     @Volatile
-    private var loaded = false
+    private var index = CueIndex()
+    override val isLoaded: Boolean get() = index.cueCount > 0
 
     override suspend fun load(): Int = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
@@ -55,9 +54,8 @@ class SrtSubtitleProvider(
         } ?: return@withContext -1
         try {
             val result = SrtParser.parse(stream, trackId, charset)
-            cues = result.cues.sortedBy { it.startMs }
-            loaded = cues.isNotEmpty()
-            cues.size
+            index = CueIndex(result.cues)
+            index.cueCount
         } catch (e: IOException) {
             Log.w("SubtitleOverlay", "srt parse failed: $e")
             -1
@@ -67,41 +65,9 @@ class SrtSubtitleProvider(
         }
     }
 
-    override fun cueAt(timeMs: Long): SubtitleCue? {
-        val list = cues
-        // cues are sorted; the active cue = the last one starting at or before
-        // time, and it must still cover the time, otherwise nothing is shown.
-        var lo = 0
-        var hi = list.size - 1
-        var candidate: SubtitleCue? = null
-        while (lo <= hi) {
-            val mid = (lo + hi) ushr 1
-            val c = list[mid]
-            when {
-                c.endMs <= timeMs -> lo = mid + 1
-                c.startMs > timeMs -> hi = mid - 1
-                else -> {
-                    // overlapping cues: display the one that started latest, keeping
-                    // the cue currently shown when durations overlap (deterministic)
-                    if (candidate == null || c.startMs > candidate.startMs) candidate = c
-                    lo = mid + 1
-                }
-            }
-        }
-        return candidate?.takeIf { it.contains(timeMs) ?: false }
-    }
+    override fun cueAt(timeMs: Long): SubtitleCue? = index.cueAt(timeMs)
 
     override fun release() {
-        cues = emptyList()
-        loaded = false
-    }
-
-    /**
-     * Test seam (called from the jvm test sources, see SubtitleOverlayTestSupport.kt):
-     * injects a parsed + sorted cue list without file I/O.
-     */
-    internal fun setCuesForTestInternal(sorted: List<SubtitleCue>) {
-        cues = sorted
-        loaded = sorted.isNotEmpty()
+        index = CueIndex()
     }
 }

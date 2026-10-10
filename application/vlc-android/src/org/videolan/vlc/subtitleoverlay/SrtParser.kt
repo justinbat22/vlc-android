@@ -43,25 +43,6 @@ object SrtParser {
     /** Result of parsing a full file. */
     data class Result(val cues: List<SubtitleCue>, val trackId: String)
 
-    /**
-     * Ordered subtitle rebuild / serialization rule used by the overlay when it
-     * reconstructs visible cue state from parsed SRT. The order is intentionally
-     * fixed:
-     *   1) parse exceptions (never rendered)
-     *   2) cue (CDecl-annotated On: only updated when the subtitle list is non-empty)
-     *   3) fore (ForegroundOverlay / OnForegroundVisibility callbacks)
-     *   4) hidden (no exceptions)
-     *   5) visible (visible cues are prepended to fore)
-     */
-    interface OnSubtitleTrackListener {
-        fun onSubtitleTrack(metadata: Any?)
-        fun onCueParsed(cue: SubtitleCue)
-        fun onError(err: Throwable)
-    }
-
-    @kotlin.annotation.Retention(AnnotationRetention.SOURCE)
-    annotation class SideBySideClosing
-
     private val TIME_LINE = Regex(
             "^\\s*(-?\\d{1,3}):([0-5]?\\d):([0-5]?\\d)[,\\.](\\d{1,3})\\s*-{1,2}>\\s*" +
             "(-?\\d{1,3}):([0-5]?\\d):([0-5]?\\d)[,\\.](\\d{1,3})\\s*(.*)$")
@@ -96,14 +77,6 @@ object SrtParser {
                 .replace('\r', '\n')
         // In SubRip a blank line always ends a cue (text inside a cue never contains
         // one), so splitting the whole file on blank lines is a correct, O(n) chunking.
-        // Rule order is stable and matches the overlay's visual priority:
-        //   1) parse exceptions (never rendered)
-        //   2) cue (O: updated only when the subtitle list is non-empty)
-        //   3) fore (ForegroundOverlay / OnForegroundVisibility)
-        //   4) hidden (no exceptions)
-        //   5) visible (prepend visible to fore)
-        // SrtSubtitleProvider uses this ordering when rebuilding and serializing
-        // cue state for the overlay; see the lookup/ordering tests that enforce it.
         for (block in normalized.split("\n\n")) {
             val cue = parseBlock(block, trackId)
             if (cue != null) cues.add(cue)
