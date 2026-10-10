@@ -466,6 +466,13 @@
     <string name="subtitles_size_title">Subtitles Size</string>
     <string name="subtitles_position_title">Subtitle position</string>
     <string name="subtitles_position_summary">Distance from the bottom of the video, in pixels: a positive value moves the subtitles up, which keeps them on the screen when the video is scaled. 0 keeps the default position.</string>
+
+    <!-- Screen-anchored subtitle overlay -->
+    <string name="subtitle_overlay_category">Subtitle overlay (screen-anchored)</string>
+    <string name="subtitle_overlay_enabled_title">Enable subtitle overlay</string>
+    <string name="subtitle_overlay_enabled_summary">Draw supported text subtitles in an overlay anchored to the whole screen, so they stay on screen and can sit in the black bars, independently of video zoom/crop. Applies to external .srt files.</string>
+    <string name="subtitle_overlay_position_title">Overlay vertical position</string>
+    <string name="subtitle_overlay_position_summary">Vertical anchor of the overlay subtitles within the whole player screen (5 to 100). 100 = bottom edge of the screen.</string>
     <string name="subtitle_settings">Subtitle settings</string>
     <string name="subtitles_presets_title">Subtitles presets</string>
     <string name="subtitles_size_nano">Nano</string>

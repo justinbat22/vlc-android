@@ -330,6 +330,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     val orientationDelegate: VideoPlayerOrientationDelegate by lazy(LazyThreadSafetyMode.NONE) { VideoPlayerOrientationDelegate(this@VideoPlayerActivity) }
     private val playerKeyListenerDelegate: PlayerKeyListenerDelegate by lazy(LazyThreadSafetyMode.NONE) { PlayerKeyListenerDelegate(this@VideoPlayerActivity) }
     val tipsDelegate: VideoTipsDelegate by lazy(LazyThreadSafetyMode.NONE) { VideoTipsDelegate(this@VideoPlayerActivity) }
+    val subtitleOverlayDelegate: SubtitleOverlayDelegate by lazy(LazyThreadSafetyMode.NONE) { SubtitleOverlayDelegate(this@VideoPlayerActivity) }
     var isTv: Boolean = false
 
     private val dialogsDelegate = DialogDelegate()
@@ -577,6 +578,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         }
 
         videoLayout = findViewById(R.id.video_layout)
+        subtitleOverlayDelegate.initialize(rootView)
 
         /* Loading view */
         loadingImageView = findViewById(R.id.player_overlay_loading)
@@ -1026,6 +1028,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun onDestroy() {
+        subtitleOverlayDelegate.release()
         super.onDestroy()
         playlistModel?.run {
             dataset.removeObserver(playlistObserver)
@@ -1606,6 +1609,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun onMediaPlayerEvent(event: MediaPlayer.Event) {
+        subtitleOverlayDelegate.onMediaPlayerEvent(event)
         service?.let { service ->
             when (event.type) {
                 MediaPlayer.Event.Playing -> onPlaying()
@@ -2573,6 +2577,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 if (volSave > 100 && service.volume != volSave) service.setVolume(volSave)
             }
             service.addCallback(this)
+            subtitleOverlayDelegate.onServiceConnected(service)
             service.playlistManager.waitForConfirmation.observe(this, resumeDialogObserver)
             //if (isTalkbackIsEnabled()) overlayDelegate.showOverlayTimeout(OVERLAY_INFINITE)
         } else if (this.service != null) {

@@ -10,3 +10,16 @@ libhamcrest-java_*.deb
 /local.properties
 *.iml
 .idea/
+
+# dependency packages used only during local verification
+junit4_*.deb
+libhamcrest-java_*.deb
+
+# IDE
+.idea/
+*.iml
+
+# Build outputs
+/build/
+application/vlc-android/build/
+.libs/

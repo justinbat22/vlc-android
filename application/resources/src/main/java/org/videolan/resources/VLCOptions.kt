@@ -201,9 +201,18 @@ object VLCOptions {
             // renderer options above it is an instance option, so the video output of every media
             // inherits it, and libvlc is the one that decides what the text can be moved over: the
             // VLC 3 engine keeps it inside the video image, the VLC 4 engine places it on the
-            // display (black bars included) when spu-fill is on, which is its default.
+            // display (black bars included) when spu-fill is on.
             val subtitlesPosition = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
             if (subtitlesPosition != 0) options.add("--sub-margin=$subtitlesPosition")
+
+            // Anchor text subpictures to the full display instead of the video rectangle, so their
+            // position and size stop following the video transform (zoom, crop, fit, aspect ratio)
+            // and they can be drawn in the black bars. This is a VLC 4 engine mode (the option is
+            // "Display sub-pictures on full window": "It allows showing subtitles in black bars");
+            // the VLC 3 engine has no equivalent and always lays text out inside the video image.
+            // Only regions without their own coordinates are moved, so authored (ASS/SSA) positions
+            // are kept as they are.
+            if (isVLC4()) options.add("--spu-fill")
 
             if (opengl == 1) options.add("--vout=gles2,none")
             else if (opengl == 0) options.add("--vout=android_display,none")

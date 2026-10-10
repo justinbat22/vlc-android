@@ -32,6 +32,27 @@
             android:persistent="true"
             android:title="@string/subtitle_preferred_language" />
 
+    <PreferenceCategory android:title="@string/subtitle_overlay_category">
+        <CheckBoxPreference
+                android:defaultValue="false"
+                android:key="subtitle_overlay_enabled"
+                android:summary="@string/subtitle_overlay_enabled_summary"
+                android:title="@string/subtitle_overlay_enabled_title"
+                app:singleLineTitle="false" />
+        <SeekBarPreference
+                android:defaultValue="98"
+                android:iconSpaceReserved="false"
+                android:key="subtitle_overlay_position"
+                android:max="100"
+                android:summary="@string/subtitle_overlay_position_summary"
+                android:title="@string/subtitle_overlay_position_title"
+                app:iconSpaceReserved="false"
+                app:min="5"
+                app:seekBarIncrement="1"
+                app:showSeekBarValue="true"
+                app:updatesContinuously="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/subtitles_font_style">
         <ListPreference
                 android:defaultValue="16"
