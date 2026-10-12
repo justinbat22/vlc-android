@@ -45,6 +45,8 @@ import org.videolan.tools.setGone
 import org.videolan.tools.setVisible
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
+import org.videolan.vlc.media.OverlaySubtitleTrack
+import org.videolan.vlc.subtitleoverlay.SubtitleOverlayRuntime
 import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.databinding.PlayerOverlayTracksBinding
 import org.videolan.vlc.getDisableTrack
@@ -102,7 +104,20 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
             }
             playbackService.spuTracks?.let { trackList ->
                 if (!playbackService.hasRenderer()) {
-                    val trackAdapter = TrackAdapter(generateTrackList(trackList), trackList.firstOrNull { it.getId() == playbackService.spuTrack }, getString(R.string.track_text))
+                    // The external subtitle drawn by the screen-anchored overlay is not a libvlc
+                    // track (the file is never attached as a slave): it is added here so the
+                    // subtitle the user sees is the one shown as selected in the menu
+                    val overlayEntry = SubtitleOverlayRuntime.externalSubtitleLabel?.let { OverlaySubtitleTrack(it) }
+                    val displayedTracks = ArrayList<VlcTrack>(trackList.size + 1)
+                    var alreadyShown = false
+                    for (t in trackList) {
+                        if (overlayEntry != null && t.getId() == overlayEntry.getId()) alreadyShown = true
+                        displayedTracks.add(t)
+                    }
+                    // The external subtitle drawn by the overlay is not a libvlc track: append it
+                    // (Array<out VlcTrack> has no plus(VlcTrack) overload, hence the manual merge)
+                    if (overlayEntry != null && !alreadyShown) displayedTracks.add(overlayEntry)
+                    val trackAdapter = TrackAdapter(displayedTracks.toTypedArray(), displayedTracks.firstOrNull { it.getId() == playbackService.spuTrack }, getString(R.string.track_text))
                     trackAdapter.setOnTrackSelectedListener { track ->
                         trackSelectionListener.invoke(track.getId(), TrackType.SPU)
                     }
@@ -112,7 +127,8 @@ class VideoTracksDialog : VLCBottomSheetDialogFragment() {
                     binding.subtitleTracks.emptyView.setVisible()
                     binding.subtitleTracks.trackMore.setGone()
                 }
-                if (trackList.isEmpty()) binding.subtitleTracks.emptyView.setVisible()
+                if (trackList.isEmpty() && SubtitleOverlayRuntime.externalSubtitleLabel == null)
+                    binding.subtitleTracks.emptyView.setVisible()
                 binding.subtitleTracks.trackTitle.contentDescription = getString(R.string.talkback_subtitle_tracks)
             }
             if (playbackService.spuTracks == null) binding.subtitleTracks.emptyView.setVisible()

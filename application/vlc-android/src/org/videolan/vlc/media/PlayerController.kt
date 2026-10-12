@@ -24,6 +24,8 @@ import org.videolan.tools.KEY_EQUALIZER_ENABLED
 import org.videolan.tools.*
 import org.videolan.vlc.*
 import org.videolan.vlc.gui.dialogs.VideoTracksDialog
+import org.videolan.vlc.subtitleoverlay.SubtitleOverlayRuntime
+import org.videolan.vlc.subtitleoverlay.SubtitleOverlayPrefs
 import org.videolan.vlc.gui.dialogs.adapters.VlcTrack
 import org.videolan.vlc.repository.EqualizerRepository
 import org.videolan.vlc.repository.SlaveRepository
@@ -264,9 +266,23 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
 
     fun getSpuTracks(): Array<out VlcTrack>? = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getAllSpuTracks() else emptyArray()
 
-    fun getSpuTrack() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedSpuTrack()?.getId() ?: "-1" else "-1"
+    /**
+     * Selected subtitle track. The overlay's own entry is reported while the overlay draws an
+     * external file (VLC knows nothing about that file, it is never attached as a slave); when the
+     * overlay draws a track embedded in the container, that track is reported instead, VLC's own
+     * rendering being off but the user's choice still being that track.
+     */
+    fun getSpuTrack(): String {
+        SubtitleOverlayRuntime.externalSubtitleLabel?.let { return SubtitleOverlayRuntime.TRACK_ID }
+        SubtitleOverlayRuntime.embeddedTrackId?.let { return it }
+        return if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSelectedSpuTrack()?.getId() ?: "-1" else "-1"
+    }
 
-    fun setSpuTrack(index: String) = !mediaplayer.isReleased && mediaplayer.hasMedia() && mediaplayer.setSpuTrack(index)
+    fun setSpuTrack(index: String): Boolean {
+        // The overlay's entry is not a libvlc track: choosing it keeps the overlay as the renderer
+        if (index == SubtitleOverlayRuntime.TRACK_ID) return SubtitleOverlayRuntime.externalSubtitleLabel != null
+        return !mediaplayer.isReleased && mediaplayer.hasMedia() && mediaplayer.setSpuTrack(index)
+    }
 
     fun getSpuTracksCount() = if (!mediaplayer.isReleased && mediaplayer.hasMedia()) mediaplayer.getSpuTracksCount() else 0
 
@@ -324,14 +340,25 @@ class PlayerController(val context: Context) : IVLCVout.Callback, MediaPlayer.Ev
      * Audio slaves are the exception: they are never attached to the media (that is what broke
      * seeking). Instead the persisted URI is kept in [pendingExternalAudioUri] so that
      * [startPlayback] can start the companion player. See [startExternalAudio].
+     *
+     * External subtitles are the other exception: when the screen-anchored overlay is enabled they
+     * are displayed by it instead (see SubtitleOverlayDelegate), so attaching them here would draw
+     * the same text twice.
      */
     suspend fun setSlaves(media: IMedia, mw: MediaWrapper) {
         if (mediaplayer.isReleased) return
+        val overlaySubtitles = SubtitleOverlayPrefs.isEnabled(context)
+        fun attachable(slave: IMedia.Slave) = slave.type != IMedia.Slave.Type.Audio &&
+                !(overlaySubtitles && slave.type == IMedia.Slave.Type.Subtitle)
         val slaves = mw.slaves
-        slaves?.filter { it.type != IMedia.Slave.Type.Audio }?.forEach { media.addSlave(it) }
+        slaves?.filter { attachable(it) }?.forEach { media.addSlave(it) }
         val persisted = slaveRepository.getSlaves(mw.location)
-        persisted.filter { it.type != IMedia.Slave.Type.Audio }.forEach { slave ->
-            if (!slaves.contains(slave)) media.addSlave(slave)
+        persisted.filter { attachable(it) }.forEach { slave ->
+            // A restored subtitle is offered as a track without asking VLC to pick it: VLC maps the
+            // slave priority onto its automatic selection (UNSELECTED_SLAVE_PRIORITY is VLC's
+            // "match none"), which is what the previous MediaPlayer.addSlave(..., false) did.
+            if (slaves?.contains(slave) != true)
+                media.addSlave(IMedia.Slave(slave.type, UNSELECTED_SLAVE_PRIORITY, slave.uri))
         }
         pendingExternalAudioUri = persisted.firstOrNull { it.type == IMedia.Slave.Type.Audio }?.uri?.let { Uri.parse(it) }
         slaves?.let { slaveRepository.saveSlaves(mw) }
@@ -613,6 +640,12 @@ private const val EXTERNAL_AUDIO_SYNC_TOLERANCE = 100L
 const val EXTERNAL_AUDIO_TRACK_ID = "external-audio"
 
 /**
+ * Priority restored subtitles are attached with. libvlc maps it to its "never auto-select" match
+ * rule: the file is available in the subtitle list but VLC doesn't pick it by itself.
+ */
+private const val UNSELECTED_SLAVE_PRIORITY = 0
+
+/**
  * Fake [VlcTrack] exposing the external audio file in the audio tracks menu so the current
  * selection is visible. Selecting it goes through [PlayerController.setAudioTrack].
  */
@@ -620,6 +653,27 @@ class ExternalAudioTrack(private val uri: Uri) : VlcTrack {
     override fun getName() = Uri.decode(uri.lastPathSegment ?: uri.toString())
 
     override fun getId() = EXTERNAL_AUDIO_TRACK_ID
+
+    override fun getWidth() = 0
+
+    override fun getHeight() = 0
+
+    override fun getProjection() = 0
+
+    override fun getFrameRateDen() = 0
+
+    override fun getFrameRateNum() = 0
+}
+
+/**
+ * Fake [VlcTrack] exposing the external subtitle drawn by the screen-anchored overlay in the
+ * subtitle tracks menu, so the current selection is visible and the entry can be picked again.
+ * Selecting it goes through [PlayerController.setSpuTrack], which never forwards it to libvlc.
+ */
+class OverlaySubtitleTrack(private val label: String) : VlcTrack {
+    override fun getName() = label
+
+    override fun getId() = SubtitleOverlayRuntime.TRACK_ID
 
     override fun getWidth() = 0
 

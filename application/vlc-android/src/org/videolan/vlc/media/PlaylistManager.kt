@@ -436,12 +436,18 @@ class PlaylistManager(val service: PlaybackService) : MediaWrapperList.EventList
         // A rebuilt playback doesn't know where it was, nor whether it was paused
         reloadStartTime = player.getCurrentTime()
         val wasPaused = !player.isPlaying()
+        // The playback must not change the UI context: a video that is not displayed anymore (played
+        // in the background) has to stay in the background, otherwise playing it again launches
+        // VideoPlayerActivity over whatever screen the setting was changed from. Videos still on
+        // screen (player activity or PiP window) keep their surface.
+        val keepInBackground = mw.type == MediaWrapper.TYPE_VIDEO && !player.isVideoPlaying()
         player.restart()
         // The surface of the released player can't be used anymore: the UI hands its own to the new
         // player before the media is played again (see [PlaybackService.Callback.onPlayerRebuilt])
         service.notifyPlayerRebuilt()
         launch {
             if (wasPaused) mw.addFlags(MediaWrapper.MEDIA_PAUSED)
+            if (keepInBackground) videoBackground = true
             try {
                 playIndex(index, forceResume = true)
             } finally {

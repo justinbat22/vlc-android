@@ -268,8 +268,6 @@ const val RESULT_RESTART_APP = Activity.RESULT_FIRST_USER + 3
 const val RESULT_UPDATE_SEEN_MEDIA = Activity.RESULT_FIRST_USER + 4
 const val RESULT_UPDATE_ARTISTS = Activity.RESULT_FIRST_USER + 5
 
-const val BETA_WELCOME = "beta_welcome"
-
 const val PLAYBACK_HISTORY = "playback_history"
 const val AUDIO_RESUME_PLAYBACK = "audio_resume_playback"
 const val VIDEO_RESUME_PLAYBACK = "video_resume_playback"
@@ -383,7 +381,6 @@ const val KEY_CASTING_QUALITY = "casting_quality"
 const val KEY_DEBLOCKING = "deblocking"
 const val KEY_NETWORK_CACHING_VALUE = "network_caching_value"
 const val KEY_SUBTITLES_SIZE = "subtitles_size"
-const val KEY_SUBTITLES_POSITION = "subtitles_position"
 const val KEY_SUBTITLES_BOLD = "subtitles_bold"
 const val KEY_SUBTITLES_BACKGROUND_COLOR = "subtitles_background_color"
 const val KEY_SUBTITLES_COLOR_OPACITY = "subtitles_color_opacity"

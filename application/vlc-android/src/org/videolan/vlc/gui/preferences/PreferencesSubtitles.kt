@@ -46,7 +46,7 @@ import org.videolan.tools.KEY_SUBTITLES_OUTLINE
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR_OPACITY
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_SIZE
-import org.videolan.tools.KEY_SUBTITLES_POSITION
+import org.videolan.tools.SubtitlePosition
 import org.videolan.tools.KEY_SUBTITLES_SHADOW
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR_OPACITY
@@ -59,7 +59,6 @@ import org.videolan.tools.Settings
 import org.videolan.vlc.BuildConfig
 import org.videolan.vlc.PlaybackService
 import org.videolan.vlc.R
-import org.videolan.vlc.isVLC4
 
 class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -150,11 +149,6 @@ class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnShare
             false
         }
 
-        // The VLC 4 engine places text subtitles on the display, which allows moving them down into
-        // the black bars; the VLC 3 engine keeps them inside the video image, so a negative value
-        // could not be honoured and the range stays positive there.
-        if (isVLC4()) findPreference<SeekBarPreference>(KEY_SUBTITLES_POSITION)?.min = -500
-
         updatePreferredSubtitleTrack()
         prepareLocaleList()
         managePreferenceVisibilities()
@@ -222,7 +216,8 @@ class PreferencesSubtitles : BasePreferenceFragment(), SharedPreferences.OnShare
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
-            KEY_SUBTITLES_SIZE, KEY_SUBTITLES_POSITION, KEY_SUBTITLES_BOLD, KEY_SUBTITLE_TEXT_ENCODING,
+            KEY_SUBTITLES_SIZE, KEY_SUBTITLES_BOLD, KEY_SUBTITLE_TEXT_ENCODING,
+            SubtitlePosition.PREF_KEY,
             KEY_SUBTITLES_COLOR, KEY_SUBTITLES_COLOR_OPACITY,
             KEY_SUBTITLES_BACKGROUND_COLOR, KEY_SUBTITLES_BACKGROUND_COLOR_OPACITY, KEY_SUBTITLES_BACKGROUND,
             KEY_SUBTITLES_OUTLINE, KEY_SUBTITLES_OUTLINE_SIZE, KEY_SUBTITLES_OUTLINE_COLOR, KEY_SUBTITLES_OUTLINE_COLOR_OPACITY,

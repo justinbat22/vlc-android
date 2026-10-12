@@ -63,7 +63,6 @@ import org.videolan.tools.KEY_SUBTITLES_OUTLINE
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_COLOR_OPACITY
 import org.videolan.tools.KEY_SUBTITLES_OUTLINE_SIZE
-import org.videolan.tools.KEY_SUBTITLES_POSITION
 import org.videolan.tools.KEY_SUBTITLES_SHADOW
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR
 import org.videolan.tools.KEY_SUBTITLES_SHADOW_COLOR_OPACITY
@@ -71,6 +70,7 @@ import org.videolan.tools.KEY_SUBTITLES_SIZE
 import org.videolan.tools.KEY_SUBTITLE_TEXT_ENCODING
 import org.videolan.tools.Preferences
 import org.videolan.tools.Settings
+import org.videolan.tools.SubtitlePosition
 import org.videolan.tools.putSingle
 import org.videolan.vlc.VlcMigrationHelper
 import org.videolan.vlc.isVLC4
@@ -195,15 +195,24 @@ object VLCOptions {
                     options.add("--freetype-outline-opacity=$freetypeOutlineOpacity")
             } else options.add("--freetype-outline-opacity=0")
 
-            // Force the vertical position of the subtitles: a positive value pushes the text up
-            // from the bottom of the video, which keeps text subtitles (SRT, ...) on the screen
-            // when the video is scaled or cropped, a negative one pushes it down. Like the text
-            // renderer options above it is an instance option, so the video output of every media
-            // inherits it, and libvlc is the one that decides what the text can be moved over: the
-            // VLC 3 engine keeps it inside the video image, the VLC 4 engine places it on the
-            // display (black bars included) when spu-fill is on, which is its default.
-            val subtitlesPosition = pref.getInt(KEY_SUBTITLES_POSITION, DEFAULT_SUBTITLES_POSITION)
-            if (subtitlesPosition != 0) options.add("--sub-margin=$subtitlesPosition")
+            // Vertical position of the subtitles, the single setting shared with the screen
+            // anchored overlay: it is a percentage (0 = bottom edge, 100 = top) mapped onto the
+            // pixel margin libvlc exposes. No option is passed at the bottom of the scale (VLC's
+            // own position is kept, so builds that never moved the slider are untouched) nor while
+            // a styled subtitle (ASS/SSA, bitmap formats) is selected: those are authored with
+            // their own coordinates and a margin would move them (see SubtitlePosition).
+            val subtitleMargin = SubtitlePosition.nativeMarginPx(context)
+            SubtitlePosition.onEngineBuilt(subtitleMargin)
+            if (subtitleMargin > 0) options.add("--sub-margin=$subtitleMargin")
+
+            // Anchor text subpictures to the full display instead of the video rectangle, so their
+            // position and size stop following the video transform (zoom, crop, fit, aspect ratio)
+            // and they can be drawn in the black bars. This is a VLC 4 engine mode (the option is
+            // "Display sub-pictures on full window": "It allows showing subtitles in black bars");
+            // the VLC 3 engine has no equivalent and always lays text out inside the video image.
+            // Only regions without their own coordinates are moved, so authored (ASS/SSA) positions
+            // are kept as they are.
+            if (isVLC4()) options.add("--spu-fill")
 
             if (opengl == 1) options.add("--vout=gles2,none")
             else if (opengl == 0) options.add("--vout=android_display,none")
@@ -253,9 +262,6 @@ object VLCOptions {
             if (BuildConfig.DEBUG) Log.d(this::class.java.simpleName, "VLC Options: ${options.joinToString(" ")}")
             return options
         }
-
-    /** Default value of [KEY_SUBTITLES_POSITION], in pixels from the bottom of the video. */
-    const val DEFAULT_SUBTITLES_POSITION = 8
 
     fun isAudioDigitalOutputEnabled(pref: SharedPreferences) = pref.getBoolean(KEY_AUDIO_DIGITAL_OUTPUT, false)
 

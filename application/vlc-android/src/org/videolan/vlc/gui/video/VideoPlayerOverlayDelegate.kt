@@ -107,6 +107,7 @@ import org.videolan.vlc.manageAbRepeatStep
 import org.videolan.vlc.media.EXTERNAL_AUDIO_TRACK_ID
 import org.videolan.vlc.media.MediaUtils
 import org.videolan.vlc.providers.PickerType
+import org.videolan.vlc.subtitleoverlay.SubtitleOverlayRuntime
 import org.videolan.vlc.util.FileUtils
 import org.videolan.vlc.util.getScreenWidth
 import org.videolan.vlc.util.isSchemeFile
@@ -295,13 +296,27 @@ class VideoPlayerOverlayDelegate (private val player: VideoPlayerActivity) {
                 }
                 VideoTracksDialog.TrackType.SPU -> {
                     player.service?.let { service ->
-                        if (isVLC4() && trackID == "-1")
-                            service.unselectTrackType(trackType)
-                        else
-                            service.setSpuTrack(trackID)
-                        runIO {
-                            val mw = player.medialibrary.findMedia(service.currentMediaWrapper)
-                            if (mw != null && mw.id != 0L) mw.setStringMeta(MediaWrapper.META_SUBTITLE_TRACK, trackID)
+                        // An explicit subtitle choice wins over the screen-anchored overlay, which
+                        // stops drawing what it had so VLC renders the entry the user picked...
+                        val overlayKeepsIt = player.subtitleOverlayDelegate.onNativeSubtitleSelected(trackID)
+                        if (overlayKeepsIt) {
+                            // ...unless the entry is the one the overlay draws itself: VLC must not
+                            // be given the track. The user's choice is still remembered for the
+                            // media, except for the overlay's own entry, which no media track
+                            // matches (see SubtitleOverlayRuntime)
+                            if (trackID != SubtitleOverlayRuntime.TRACK_ID) runIO {
+                                val mw = player.medialibrary.findMedia(service.currentMediaWrapper)
+                                if (mw != null && mw.id != 0L) mw.setStringMeta(MediaWrapper.META_SUBTITLE_TRACK, trackID)
+                            }
+                        } else {
+                            if (isVLC4() && trackID == "-1")
+                                service.unselectTrackType(trackType)
+                            else
+                                service.setSpuTrack(trackID)
+                            runIO {
+                                val mw = player.medialibrary.findMedia(service.currentMediaWrapper)
+                                if (mw != null && mw.id != 0L) mw.setStringMeta(MediaWrapper.META_SUBTITLE_TRACK, trackID)
+                            }
                         }
                     }
                 }

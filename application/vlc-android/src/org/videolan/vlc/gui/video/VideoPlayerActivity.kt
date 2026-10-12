@@ -330,6 +330,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     val orientationDelegate: VideoPlayerOrientationDelegate by lazy(LazyThreadSafetyMode.NONE) { VideoPlayerOrientationDelegate(this@VideoPlayerActivity) }
     private val playerKeyListenerDelegate: PlayerKeyListenerDelegate by lazy(LazyThreadSafetyMode.NONE) { PlayerKeyListenerDelegate(this@VideoPlayerActivity) }
     val tipsDelegate: VideoTipsDelegate by lazy(LazyThreadSafetyMode.NONE) { VideoTipsDelegate(this@VideoPlayerActivity) }
+    val subtitleOverlayDelegate: SubtitleOverlayDelegate by lazy(LazyThreadSafetyMode.NONE) { SubtitleOverlayDelegate(this@VideoPlayerActivity) }
     var isTv: Boolean = false
 
     private val dialogsDelegate = DialogDelegate()
@@ -476,7 +477,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     private val downloadedSubtitleObserver = Observer<List<org.videolan.vlc.mediadb.models.ExternalSub>> { externalSubs ->
         for (externalSub in externalSubs) {
             if (!addedExternalSubs.contains(externalSub)) {
-                service?.addSubtitleTrack(externalSub.subtitlePath, currentSpuTrack == "-2")
+                val subtitlePath = externalSub.subtitlePath
+                // The overlay displays the downloaded subtitle when it handles it; otherwise VLC does
+                if (subtitleOverlayDelegate.handlesExternalSubtitle(subtitlePath))
+                    subtitleOverlayDelegate.handlePickedSubtitle(subtitlePath, saveForMedia = false)
+                else service?.addSubtitleTrack(subtitlePath, currentSpuTrack == "-2")
                 addedExternalSubs.add(externalSub)
             }
         }
@@ -577,6 +582,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
         }
 
         videoLayout = findViewById(R.id.video_layout)
+        subtitleOverlayDelegate.initialize(rootView)
 
         /* Loading view */
         loadingImageView = findViewById(R.id.player_overlay_loading)
@@ -1026,6 +1032,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun onDestroy() {
+        subtitleOverlayDelegate.release()
         super.onDestroy()
         playlistModel?.run {
             dataset.removeObserver(playlistObserver)
@@ -1205,11 +1212,19 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 addNextTrack = true
             } else {
                 val subtitleUri = data.getStringExtra(EXTRA_MRL)!!.toUri()
-                service?.addSubtitleTrack(getUri(subtitleUri) ?: subtitleUri, false)
-                service?.currentMediaWrapper?.let {
-                    SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+                val resolvedSubtitle = getUri(subtitleUri) ?: subtitleUri
+                if (subtitleOverlayDelegate.handlesExternalSubtitle(resolvedSubtitle.toString())) {
+                    // The overlay draws the picked subtitle itself: the file is not attached to VLC
+                    // as a slave, and no native track is selected for it (setting [addNextTrack]
+                    // would make the next ESAdded(Text) event select an embedded track instead)
+                    subtitleOverlayDelegate.handlePickedSubtitle(resolvedSubtitle.toString())
+                } else {
+                    service?.addSubtitleTrack(resolvedSubtitle, false)
+                    service?.currentMediaWrapper?.let {
+                        SlaveRepository.getInstance(this).saveSlave(it.location, IMedia.Slave.Type.Subtitle, 2, data.getStringExtra(EXTRA_MRL)!!)
+                    }
+                    addNextTrack = true
                 }
-                addNextTrack = true
             }
         } else if (BuildConfig.DEBUG) Log.d(TAG, "Subtitle selection dialog was cancelled")
     }
@@ -1606,6 +1621,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     override fun onMediaPlayerEvent(event: MediaPlayer.Event) {
+        subtitleOverlayDelegate.onMediaPlayerEvent(event)
         service?.let { service ->
             when (event.type) {
                 MediaPlayer.Event.Playing -> onPlaying()
@@ -1613,7 +1629,10 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 MediaPlayer.Event.Opening -> {
                     forcedTime = -1
                     if (!subtitlesExtraPath.isNullOrEmpty()) {
-                        service.addSubtitleTrack(subtitlesExtraPath!!, true)
+                        val extraSubtitle = subtitlesExtraPath!!
+                        if (subtitleOverlayDelegate.handlesExternalSubtitle(extraSubtitle))
+                            subtitleOverlayDelegate.handlePickedSubtitle(extraSubtitle, saveForMedia = false)
+                        else service.addSubtitleTrack(extraSubtitle, true)
                         subtitlesExtraPath = null
                     }
                 }
@@ -1683,7 +1702,14 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                                     if ((tracks as Array<VlcTrack>).isNotEmpty()) service.setSpuTrack(tracks[tracks.size - 1].getId())
                                     addNextTrack = false
                                 } else if (spuTrack != "0" || currentSpuTrack != "-2") {
-                                    service.setSpuTrack(spuTrack)
+                                    // The overlay may own this subtitle: it draws the media's
+                                    // external file, and takes an embedded text track over (keeping
+                                    // VLC's rendering off is what prevents the same text from being
+                                    // drawn twice)
+                                    withContext(Dispatchers.Main) {
+                                        if (!subtitleOverlayDelegate.onNativeSubtitleAboutToSelect(spuTrack))
+                                            service.setSpuTrack(spuTrack)
+                                    }
                                     lastSpuTrack = "-2"
                                 }
                             }
@@ -2165,7 +2191,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
             lastAudioTrack = "-2"
         }
         if (lastSpuTrack >=" -1") {
-            service?.setSpuTrack(lastSpuTrack)
+            // The overlay may own this subtitle: it draws the media's external file, and takes an
+            // embedded text track over. In both cases VLC's own track stays off (the track the
+            // overlay took from it is remembered and given back when the overlay stops)
+            if (!subtitleOverlayDelegate.onNativeSubtitleAboutToSelect(lastSpuTrack))
+                service?.setSpuTrack(lastSpuTrack)
             lastSpuTrack = "-2"
         }
     }
@@ -2250,7 +2280,11 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 positionInPlaylist = extras.getInt(PLAY_EXTRA_OPENED_POSITION, -1)
 
                 subtitlesExtraPath = extras.getString(PLAY_EXTRA_SUBTITLES_LOCATION)
-                if (!subtitlesExtraPath.isNullOrEmpty()) service.addSubtitleTrack(subtitlesExtraPath!!, true)
+                // The overlay takes the subtitle over when it is enabled and handles the format: it
+                // is loaded when the media starts (see the Opening event), once the media it belongs
+                // to is known
+                if (!subtitlesExtraPath.isNullOrEmpty() && !subtitleOverlayDelegate.handlesExternalSubtitle(subtitlesExtraPath))
+                    service.addSubtitleTrack(subtitlesExtraPath!!, true)
                 if (intent.hasExtra(PLAY_EXTRA_ITEM_TITLE))
                     itemTitle = extras.getString(PLAY_EXTRA_ITEM_TITLE)
             }
@@ -2573,6 +2607,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                 if (volSave > 100 && service.volume != volSave) service.setVolume(volSave)
             }
             service.addCallback(this)
+            subtitleOverlayDelegate.onServiceConnected(service)
             service.playlistManager.waitForConfirmation.observe(this, resumeDialogObserver)
             //if (isTalkbackIsEnabled()) overlayDelegate.showOverlayTimeout(OVERLAY_INFINITE)
         } else if (this.service != null) {

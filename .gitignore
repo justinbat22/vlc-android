@@ -78,3 +78,9 @@ libvlcpp.pc
 lib/
 /buildsystem/automation/certificates/
 /buildsystem/.check-commits/
+
+# Local verification artifacts (offline kotlinc/JUnit checks)
+junit4_*.deb
+libhamcrest-java_*.deb
+*.class
+*.kt.bc
