@@ -301,6 +301,9 @@ class SubtitleOverlayDelegate(private val activity: VideoPlayerActivity) :
             SubtitleOverlayController.PREF_OVERLAY_ENABLED -> onOverlayToggled()
             SubtitleOverlayView.PREF_OVERLAY_POSITION ->
                 overlayView?.let { it.positionPercent = SubtitleOverlayPrefs.position(activity) }
+            // Size, colours, outline...: the overlay is drawn by the app, so it follows a change at
+            // once (the VLC renderer needs the player to be rebuilt, which the settings screen does)
+            in SubtitleOverlayView.APPEARANCE_KEYS -> overlayView?.refreshAppearance()
         }
     }
 
@@ -466,6 +469,10 @@ class SubtitleOverlayDelegate(private val activity: VideoPlayerActivity) :
             syncNativeSubtitleRendering()
             return true
         }
+        // "Nothing to restore" (-2), or an implicit "no subtitle", is not a choice: it must never
+        // stop what the overlay draws. (The player used to report "-2" on every Playing event,
+        // which unloaded the overlay on play/pause and left the menu on "Disable".)
+        if (!explicit && trackId == NO_TRACK) return false
         if (explicit) {
             // The user is in control from now on: nothing has to be given back when the overlay stops
             nativeSubtitleBeforeOverlay = null

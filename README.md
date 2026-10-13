@@ -7,7 +7,7 @@
 **The official VLC for Android, plus an AMOLED theme, selectable interface colours,
 seek-safe external audio and a screen-anchored subtitle overlay.**
 
-[![Build APK](https://img.shields.io/github/actions/workflow/status/subashbuilds/vlc-android/build-apk.yml?branch=master&style=flat-square&label=build&logo=githubactions&logoColor=white)](https://github.com/subashbuilds/vlc-android/actions/workflows/build-apk.yml)
+[![Build APK](https://img.shields.io/github/actions/workflow/status/subashbuilds/vlc-android/release-apk.yml?branch=master&style=flat-square&label=build&logo=githubactions&logoColor=white)](https://github.com/subashbuilds/vlc-android/actions/workflows/release-apk.yml)
 [![Release](https://img.shields.io/github/v/release/subashbuilds/vlc-android?include_prereleases&style=flat-square&label=release)](https://github.com/subashbuilds/vlc-android/releases)
 [![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue?style=flat-square)](COPYING)
 [![Platform](https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square&logo=android&logoColor=white)](#requirements)

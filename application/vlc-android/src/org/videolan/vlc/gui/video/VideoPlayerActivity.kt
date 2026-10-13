@@ -286,8 +286,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     var isLocked = false
 
     /* -1 is a valid track (Disable) */
-    private var lastAudioTrack = "-2"
-    private var lastSpuTrack = "-2"
+    private var lastAudioTrack = NO_TRACK_TO_RESTORE
+    private var lastSpuTrack = NO_TRACK_TO_RESTORE
     var lockBackButton = false
     private var wasPaused = false
     private var savedTime: Long = -1
@@ -1693,7 +1693,8 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                                     }
                                 }
                                 val spuTrack = when (val savedTrack = media.getMetaString(MediaWrapper.META_SUBTITLE_TRACK) ?: "0") {
-                                    "0" -> preferredTrack
+                                    // "-2" is not a track: older builds saved it by mistake (see setESTracks)
+                                    "0", NO_TRACK_TO_RESTORE -> preferredTrack
                                     else -> savedTrack
                                 }
                                 if (addNextTrack) {
@@ -1710,7 +1711,7 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
                                         if (!subtitleOverlayDelegate.onNativeSubtitleAboutToSelect(spuTrack))
                                             service.setSpuTrack(spuTrack)
                                     }
-                                    lastSpuTrack = "-2"
+                                    lastSpuTrack = NO_TRACK_TO_RESTORE
                                 }
                             }
                         }
@@ -2186,17 +2187,21 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     }
 
     private fun setESTracks() {
-        if (lastAudioTrack >= "-1") {
+        // "-2" means "nothing to restore". It used to pass the old String comparisons
+        // (`"-2" >= "-1"` is true), so every Playing event (play/pause included) "restored" a
+        // subtitle track that did not exist: the overlay was unloaded and "-2" was saved as the
+        // subtitle track of the media, which is what made the selection fall back to "Disable".
+        if (lastAudioTrack != NO_TRACK_TO_RESTORE) {
             service?.setAudioTrack(lastAudioTrack)
-            lastAudioTrack = "-2"
+            lastAudioTrack = NO_TRACK_TO_RESTORE
         }
-        if (lastSpuTrack >=" -1") {
+        if (lastSpuTrack != NO_TRACK_TO_RESTORE) {
             // The overlay may own this subtitle: it draws the media's external file, and takes an
             // embedded text track over. In both cases VLC's own track stays off (the track the
             // overlay took from it is remembered and given back when the overlay stops)
             if (!subtitleOverlayDelegate.onNativeSubtitleAboutToSelect(lastSpuTrack))
                 service?.setSpuTrack(lastSpuTrack)
-            lastSpuTrack = "-2"
+            lastSpuTrack = NO_TRACK_TO_RESTORE
         }
     }
 
@@ -2637,6 +2642,9 @@ open class VideoPlayerActivity : AppCompatActivity(), PlaybackService.Callback, 
     companion object {
 
         private const val TAG = "VLC/VideoPlayerActivity"
+
+        /** Track id meaning "no audio/subtitle track to restore" (never a real libvlc track id). */
+        private const val NO_TRACK_TO_RESTORE = "-2"
 
         private val ACTION_RESULT = "player.result".buildPkgString()
         private const val EXTRA_POSITION = "extra_position"

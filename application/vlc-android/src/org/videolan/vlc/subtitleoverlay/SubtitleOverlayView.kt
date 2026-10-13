@@ -81,6 +81,7 @@ class SubtitleOverlayView @JvmOverloads constructor(
     }
 
     private var textSizePx = 48f
+    private var sizeSetting: String? = null
     private var outlineWidthPx = 2f
     private var textColor = 0xFFFFFFFF.toInt()
     private var textOpacity = 255
@@ -106,23 +107,18 @@ class SubtitleOverlayView @JvmOverloads constructor(
         refreshAppearance()
     }
 
+    /** Reads every subtitle style setting again and redraws (the settings can change while playing). */
     fun refreshAppearance() {
         val prefs = Settings.getInstance(context)
         val density = resources.displayMetrics.density
-        // subtitles_size pref is the same value VLC maps onto freetype-rel-fontsize;
-        // overlay uses a px size derived from it so both paths stay proportional.
-        val scaled = when (prefs.getString("subtitles_size", "16")) {
-            "40" -> 54f; "32" -> 44f; "25" -> 36f; "19" -> 30f
-            "16" -> 26f; "13" -> 24f; else -> 22f
-        }
-        textSizePx = scaled * density
-        textPaint.textSize = textSizePx
-        outlinePaint.textSize = textSizePx
+        sizeSetting = prefs.getString(PREF_SIZE, null)
+        applyTextSize()
 
         textOpacity = prefs.getInt("subtitles_color_opacity", 255)
         textColor = prefs.getInt("subtitles_color", 0xFFFFFFFF.toInt())
         textPaint.color = applyAlpha(textColor, textOpacity)
         textPaint.isFakeBoldText = prefs.getBoolean("subtitles_bold", false)
+        outlinePaint.isFakeBoldText = textPaint.isFakeBoldText
 
         val bgEnabled = prefs.getBoolean("subtitles_background", false)
         bgOpacity = if (bgEnabled) prefs.getInt("subtitles_background_color_opacity", 255) else 0
@@ -144,7 +140,22 @@ class SubtitleOverlayView @JvmOverloads constructor(
                         prefs.getInt("subtitles_shadow_color_opacity", 128)) else 0x00000000)
 
         bgPaint.color = applyAlpha(bgColor, bgOpacity)
+        // The text was measured with the previous size/weight
+        cacheLayout()
         invalidate()
+    }
+
+    /**
+     * Text size from the "Subtitle size" setting and the size of the container (see
+     * [SubtitleSizing]): the container is known once the view was laid out, the display until then.
+     */
+    private fun applyTextSize() {
+        val metrics = resources.displayMetrics
+        val shortSide = if (width > 0 && height > 0) min(width, height)
+        else min(metrics.widthPixels, metrics.heightPixels)
+        textSizePx = SubtitleSizing.textSizePx(sizeSetting, shortSide.toFloat())
+        textPaint.textSize = textSizePx
+        outlinePaint.textSize = textSizePx
     }
 
     private fun applyAlpha(color: Int, opacity: Int) = (color and 0x00FFFFFF) or ((opacity.coerceIn(0, 255)) shl 24)
@@ -181,6 +192,9 @@ class SubtitleOverlayView @JvmOverloads constructor(
         // block always fits fully inside the view (controller re-queries this on
         // layout changes)
         positionPercent = positionPercent
+        // The text size follows the container: re-measure the cue with it
+        applyTextSize()
+        cacheLayout()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -257,6 +271,17 @@ class SubtitleOverlayView @JvmOverloads constructor(
     companion object {
         /** Preference key holding [positionPercent] (as a percent, see SubtitlePosition). */
         const val PREF_OVERLAY_POSITION = SubtitlePosition.PREF_KEY
+
+        /** Preference key of the "Subtitle size" setting (libvlc's freetype-rel-fontsize divisor). */
+        const val PREF_SIZE = "subtitles_size"
+
+        /** Preference keys that change how the overlay looks (all but the position). */
+        val APPEARANCE_KEYS = setOf(
+                PREF_SIZE, "subtitles_bold",
+                "subtitles_color", "subtitles_color_opacity",
+                "subtitles_background", "subtitles_background_color", "subtitles_background_color_opacity",
+                "subtitles_outline", "subtitles_outline_size", "subtitles_outline_color", "subtitles_outline_color_opacity",
+                "subtitles_shadow", "subtitles_shadow_color", "subtitles_shadow_color_opacity")
 
         /** Highest positionPercent the overlay can be moved up to (top of the container). */
         const val MAX_POSITION = 1.0f
