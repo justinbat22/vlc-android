@@ -60,7 +60,7 @@ allprojects {
 }
 
 ext {
-    appId = "org.videolan.vlc"
+    appId = "subashbuilds.vlc.fork"
     versionCode = 3070130
     vlcMajorVersion = project.hasProperty('forceVlc4') && project.getProperty('forceVlc4') ? 4 : 3
     versionName = vlcMajorVersion == 3 ? '3.7.2 Beta 3' : '4.0.0-preview - ' + versionCode

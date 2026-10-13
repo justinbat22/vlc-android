@@ -1457,7 +1457,7 @@ class PlaybackService : MediaBrowserServiceCompat(), LifecycleOwner, CoroutineSc
                     .putExtra("album", if (media != null) MediaUtils.getMediaAlbum(this@PlaybackService, media) else null)
                     .putExtra("duration", media?.length ?: 0)
                     .putExtra("playing", isPlaying)
-                    .putExtra("package", "org.videolan.vlc")
+                    .putExtra("package", "subashbuilds.vlc.fork")
                     .apply {
                         if (lastChaptersCount > 0) getCurrentChapter()?.let { putExtra("chapter", it) }
                     })

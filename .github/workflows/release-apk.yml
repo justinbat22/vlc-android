@@ -1,8 +1,14 @@
 # Place at: .github/workflows/release-apk.yml
 #
 # Manual-only release build. Click "Run workflow" in the Actions tab, then pick:
+#   - version:         YOUR build version, e.g. 1.22.0 (a leading "v" is optional). It is not VLC's
+#                      version: it names the APKs, the GitHub release and its tag.
 #   - abi:             all (default) or one of arm64-v8a / armeabi-v7a / x86_64 / x86
 #   - publish_release: tick to also publish the APK(s) on the repo's Releases page
+#
+# Version 1.22.0 gives:
+#   APK      vlc-android-fork-v1.22.0-arm64-v8a.apk  (one per ABI)
+#   Release  "VLC Android Fork v1.22.0", tag v1.22.0
 #
 # The APK is always uploaded as a workflow artifact too (kept 30 days).
 name: Release APK
@@ -10,6 +16,10 @@ name: Release APK
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Your build version, e.g. 1.22.0 (names the APKs, the release and its tag)"
+        type: string
+        required: true
       abi:
         description: "ABI to build (all = every ABI)"
         type: choice
@@ -39,7 +49,27 @@ jobs:
     env:
       ABI: ${{ inputs.abi }}
       BUILD_TOOLS: 36.0.0
+      PUBLISH: ${{ inputs.publish_release }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      # Fail in seconds, not after a 30 minute build: bad version, or a release that already exists.
+      - name: Check version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION//[[:space:]]/}"
+          VERSION="${VERSION#[vV]}"
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+){0,3}([-+][0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Invalid version '$INPUT_VERSION'. Use something like 1.22.0 or 1.22.0-beta1."
+            exit 1
+          fi
+          if [ "$PUBLISH" = "true" ] && gh release view "v${VERSION}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release v${VERSION} already exists. Pick a new version or delete that release first."
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Building version ${VERSION}"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
@@ -68,13 +98,17 @@ jobs:
       - name: Build release APKs (unsigned)
         run: gradle -p application/app assembleRelease --stacktrace
 
-      - name: Pick ABI
+      # Gradle names the APKs VLC-Android-<official version>-<abi>.apk. Keep the wanted ABI(s) and
+      # give them the fork's name: vlc-android-fork-v<version>-<abi>.apk
+      - name: Pick ABI and name the APKs
         run: |
           mkdir -p unsigned
-          find application/app/build/outputs/apk/release -name '*.apk' -exec cp {} unsigned/ \;
-          if [ "$ABI" != "all" ]; then
-            find unsigned -name '*.apk' ! -name "*-${ABI}.apk" -delete
-          fi
+          for f in $(find application/app/build/outputs/apk/release -name '*.apk'); do
+            abi="$(basename "$f" | sed -nE 's/.*-(armeabi-v7a|arm64-v8a|x86_64|x86|all)\.apk$/\1/p')"
+            [ -n "$abi" ] || { echo "::warning::Skipping $(basename "$f"): unknown ABI"; continue; }
+            if [ "$ABI" != "all" ] && [ "$abi" != "$ABI" ]; then continue; fi
+            cp "$f" "unsigned/vlc-android-fork-v${VERSION}-${abi}.apk"
+          done
           ls -lh unsigned
           [ -n "$(ls unsigned/*.apk 2>/dev/null)" ] || { echo "::error::No APK for ABI '$ABI'"; exit 1; }
 
@@ -117,21 +151,19 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: vlc-release-${{ inputs.abi }}
+          name: vlc-android-fork-v${{ env.VERSION }}-${{ inputs.abi }}
           path: out/*.apk
           if-no-files-found: error
           retention-days: 30
 
       - name: Publish GitHub release
         if: ${{ inputs.publish_release }}
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="build-${GITHUB_RUN_NUMBER}"
+          TAG="v${VERSION}"
           gh release create "$TAG" out/*.apk \
             --target "$GITHUB_SHA" \
-            --title "VLC Android fork - build ${GITHUB_RUN_NUMBER} (${ABI})" \
-            --notes "Commit ${GITHUB_SHA}. ABI: ${ABI}."
+            --title "VLC Android Fork v${VERSION}" \
+            --notes "Version ${VERSION}. Commit ${GITHUB_SHA}. ABI: ${ABI}."
 
       - name: Build reports (on failure)
         if: failure()
